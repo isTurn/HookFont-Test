@@ -1,0 +1,16 @@
+# 统一换行与二进制标记：文本文件以 LF 入库，检出时按平台处理
+* text=auto
+
+# 显式标记二进制文件（不参与换行归一化）
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.lib binary
+*.dll binary
+*.exe binary
+*.pdb binary
+*.obj binary
+*.res binary
+*.zip binary

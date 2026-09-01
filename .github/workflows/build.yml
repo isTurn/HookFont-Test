@@ -1,0 +1,32 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-x86:
+    name: Build (Release x86)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore & Build
+        run: msbuild HookFont.sln /t:Rebuild /p:Configuration=Release /p:Platform=x86 /m
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: HookFont-x86
+          path: |
+            Release/HookFont.dll
+            Release/RiaLoader.exe
+            Release/Rxx.lib
+          if-no-files-found: error

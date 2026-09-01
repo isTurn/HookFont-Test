@@ -1,0 +1,43 @@
+使用说明（HookFont 字体替换工具）
+=================================
+
+一、部署
+1. 把以下 3 个文件复制到游戏目录：
+      HookFont.dll
+      HookFont.exe
+      HookFont.ini
+   （不要改名；若改名，则 .ini 必须与 .dll/.exe 同名，且保持 UTF-8 编码）
+
+2. 用记事本打开 HookFont.ini 配置：
+   [RiaLoader] 段
+     TargetEXE      = 游戏主程序文件名（如 ojyousama.exe）
+     TargetDLLCount = 要注入的 DLL 数量
+     TargetDLLName_0/1/2... = 要注入的 DLL 文件名
+     例：注入字体 Hook 与翻译补丁两个 DLL：
+       TargetEXE = ojyousama.exe
+       TargetDLLCount = 2
+       TargetDLLName_0 = HookFont.dll
+       TargetDLLName_1 = kDays.dll
+
+   [HookFont] 段
+     Charset  = 0x86   （0x86=GB2312 简体中文，0x81=日文，1=系统默认）
+     FontName = 黑体    （替换成的字体名，需系统已安装）
+     HookCreateFontA / HookCreateFontIndirectA / HookCreateFontW / HookCreateFontIndirectW
+              = true / false （是否 Hook 对应的字体创建 API，一般全开）
+     可选窗口标题替换：
+       HookWindowTitle = false
+       RawWindowTitle  = 原标题
+       NewWindowTitle  = 新标题
+
+3. 双击 HookFont.exe 启动游戏。
+
+二、故障排查
+- 运行后同目录会生成日志：HookFont.log（字体 Hook 是否初始化成功）、
+  HookFont 同名的 .log（启动器日志，记录启动与注入情况）。
+- 若游戏没有反应，先看这两个日志。
+- 游戏目录含中文等特殊字符路径时程序会自动处理，一般无需担心。
+
+三、常见问题
+- 字体没变：检查 [HookFont] 段是否存在、FontName 是否正确安装。
+- 某游戏崩溃：可尝试把 HookCreateFontW / HookCreateFontIndirectW 改为 false 试试。
+- 旧版只有 A 版 Hook：新版默认同时 Hook A 与 W 版，覆盖更全。
