@@ -1,0 +1,27 @@
+# ---- Build outputs ----
+Release/
+Debug/
+x64/
+.vs/
+*.obj
+*.pdb
+*.ilk
+*.iobj
+*.ipdb
+*.tlog
+*.exp
+*.log
+*.user
+
+# ---- Local deployed/test artifacts (project root) ----
+/HookFont.dll
+/HookFont.exe
+/HookFont.ini
+/使用说明.txt
+
+# ---- Smoke-test build outputs (keep the test sources) ----
+test/**/*.exe
+test/**/*.dll
+test/**/*.obj
+test/**/*.log
+test/**/*_result.txt
