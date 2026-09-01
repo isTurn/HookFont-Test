@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#161616">
+<title>HookFont — 日系 Galgame 字体替换 / 汉化工具链</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    background: #161616; color: #e8e6e1;
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 40px 20px;
+  }
+  .card {
+    max-width: 780px; width: 100%; text-align: center;
+    background: #1f1f1f; border: 1px solid #333333; border-radius: 16px;
+    padding: 48px 40px; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  }
+  .logo {
+    font-size: 44px; line-height: 1; font-weight: 700;
+    width: 88px; height: 88px; margin: 0 auto 24px;
+    display: flex; align-items: center; justify-content: center;
+    background: #c0392b; color: #fff; border-radius: 22px;
+    box-shadow: 0 10px 30px rgba(192,57,43,.4);
+  }
+  h1 { font-size: 32px; font-weight: 700; color: #fff; margin-bottom: 12px; }
+  .sub { font-size: 16px; color: #a8a29e; line-height: 1.7; margin-bottom: 28px; }
+  .features {
+    list-style: none; text-align: left; margin: 0 auto 32px; max-width: 580px;
+    display: grid; gap: 10px;
+  }
+  .features li {
+    background: #2a2a2a; border-radius: 10px; padding: 12px 16px;
+    font-size: 14px; color: #d6d3cf;
+  }
+  .features b { color: #fff; }
+  .features code {
+    background: #3a3a3a; padding: 1px 6px; border-radius: 5px;
+    font-size: 12.5px; color: #f5f5f5;
+  }
+  .btns { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 12px 26px; border-radius: 10px;
+    font-size: 15px; font-weight: 600; text-decoration: none; transition: .2s;
+  }
+  .btn-primary { background: #c0392b; color: #fff; }
+  .btn-primary:hover { background: #d3543c; }
+  .btn-ghost { background: transparent; color: #a8a29e; border: 1px solid #444444; }
+  .btn-ghost:hover { color: #e8e6e1; border-color: #666666; }
+  .footer { margin-top: 32px; font-size: 13px; color: #78716c; }
+  .footer a { color: #a8a29e; }
+  @media (prefers-color-scheme: light) {
+    body { background: #f5f3ef; color: #1c1917; }
+    .card { background: #fff; border-color: #e7e5e4; }
+    .features li { background: #f5f3ef; color: #44403c; }
+    .features b { color: #1c1917; }
+    .features code { background: #e7e5e4; color: #292524; }
+    .sub { color: #78716c; }
+    .btn-ghost { color: #78716c; border-color: #d6d3d1; }
+    .btn-ghost:hover { color: #1c1917; border-color: #a8a29e; }
+    .footer { color: #a8a29e; }
+    .footer a { color: #78716c; }
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">字</div>
+    <h1>HookFont</h1>
+    <p class="sub">日系 Galgame 字体替换 / 汉化工具链 —— 启动游戏进程并注入 Hook DLL，强制把字体替换为指定字符集与字体，让日文游戏正确显示中文。</p>
+    <ul class="features">
+      <li><b>强制字体替换</b> — Hook <code>CreateFontA/W</code>、<code>CreateFontIndirectA/W</code> 四个 API，统一替换字符集与字体</li>
+      <li><b>Detours 注入</b> — 以挂起方式启动目标游戏并注入 Hook DLL，稳定可靠</li>
+      <li><b>窗口标题替换</b> — 可选将游戏窗口标题替换为任意文本</li>
+      <li><b>中文路径兼容</b> — 配置文件按程序自身目录解析，中文路径自动转 8.3 短路径</li>
+      <li><b>日志排查</b> — 运行日志落盘（<code>HookFont.log</code>），异常可追查</li>
+    </ul>
+    <div class="btns">
+      <a class="btn btn-primary" href="https://github.com/isTurn/HookFont-Test/releases" target="_blank" rel="noopener">下载</a>
+      <a class="btn btn-ghost" href="https://github.com/isTurn/HookFont-Test" target="_blank" rel="noopener">查看源码</a>
+    </div>
+    <div class="footer">
+      开源 · <a href="https://github.com/isTurn/HookFont-Test/blob/main/README.md" target="_blank" rel="noopener">使用文档</a> ·
+      <a href="https://github.com/isTurn/HookFont-Test/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+    </div>
+  </div>
+</body>
+</html>
