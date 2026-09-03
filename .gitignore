@@ -27,3 +27,7 @@ test/**/*_result.txt
 
 # artifact-preview 渲染缓存
 .preview/
+
+# ---- Test font assets (large, system-copied) ----
+test/fonts/
+test/x64/fonts/

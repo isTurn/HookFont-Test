@@ -93,35 +93,46 @@ static void StartHook()
 		uint32_t     uiCharSet  = ReadIniKey(keys, L"Charset", (uint32_t)0x86);
 		std::wstring wsFontName = ReadIniKey(keys, L"FontName", std::wstring(L"黑体"));
 
-		// [FontMap] section: requested face -> replacement (value may be a candidate list).
-		FontMapT mpFontMap;
-		if (ini.Has(L"FontMap"))
+		// Optional: auto-register fonts shipped in <dll dir>\fonts\ BEFORE resolving
+		// the target fonts, so they become visible to EnumFontFamiliesExW below.
+		if (ReadIniKey(keys, L"AutoInstallFonts", true))
 		{
-			KeysMap& fontMapKeys = ini[L"FontMap"];
-			for (auto& kv : fontMapKeys)
-				mpFontMap[kv.first] = static_cast<std::wstring>(kv.second);
+			wchar_t wsDllDir[MAX_PATH] = { 0 };
+			GetModuleFileNameW(g_hModule, wsDllDir, MAX_PATH);
+			wchar_t* pSlash = wcsrchr(wsDllDir, L'\\');
+			if (pSlash) *pSlash = L'\0';
+			int nInstalled = InstallFontsFromDirectory(wsDllDir);
+			if (nInstalled > 0) LogPrint(L"Auto-installed %d font(s) from fonts\\", nInstalled);
 		}
 
-		ConfigureFontReplace(uiCharSet, wsFontName, mpFontMap);
+		// [FontMap] section: requested face -> replacement (value may be a candidate
+		// list; keys may contain '*' / '?' wildcards). Read in definition order so
+		// wildcard precedence is deterministic.
+		FontMapListT vFontMap;
+		for (auto& kv : ini.GetOrdered(L"FontMap"))
+			vFontMap.emplace_back(kv.first, static_cast<std::wstring>(kv.second));
+
+		ConfigureFontReplace(uiCharSet, wsFontName, vFontMap);
 
 		if (ReadIniKey(keys, L"HookCreateFontA", true))          HookCreateFontA();
 		if (ReadIniKey(keys, L"HookCreateFontIndirectA", true))  HookCreateFontIndirectA();
 		if (ReadIniKey(keys, L"HookCreateFontW", true))          HookCreateFontW();
 		if (ReadIniKey(keys, L"HookCreateFontIndirectW", true))  HookCreateFontIndirectW();
 		if (ReadIniKey(keys, L"HookDirectWrite", true))          HookDirectWrite();
+		if (ReadIniKey(keys, L"HookGdiplus", true))              HookGdiplus();
 
 		// Optional: replace the game window title (common in translation patches).
 		if (ReadIniKey(keys, L"HookWindowTitle", false))
 		{
-			std::string sRawTitle = WStrToStr(ReadIniKey(keys, L"RawWindowTitle", std::wstring()), CP_ACP);
-			std::string sNewTitle = WStrToStr(ReadIniKey(keys, L"NewWindowTitle", std::wstring()), CP_ACP);
-			if (!sRawTitle.empty() && !sNewTitle.empty())
+			std::wstring wsRawTitle = ReadIniKey(keys, L"RawWindowTitle", std::wstring());
+			std::wstring wsNewTitle = ReadIniKey(keys, L"NewWindowTitle", std::wstring());
+			if (!wsRawTitle.empty() && !wsNewTitle.empty())
 			{
-				HookTitleExA(sRawTitle.c_str(), sNewTitle.c_str());
+				HookTitleWindow(wsRawTitle.c_str(), wsNewTitle.c_str());
 			}
 		}
 
-		LogPrint(L"HookFont initialized. Charset=0x%02X Font=%ls MapEntries=%d", uiCharSet, wsFontName.c_str(), (int)mpFontMap.size());
+		LogPrint(L"HookFont initialized. Charset=0x%02X Font=%ls MapEntries=%d", uiCharSet, wsFontName.c_str(), (int)vFontMap.size());
 	}
 	catch (const std::exception& err)
 	{

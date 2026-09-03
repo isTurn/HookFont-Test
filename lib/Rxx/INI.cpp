@@ -49,7 +49,12 @@ namespace Rcf
 				{
 					pos = line.find_first_of(L'=');
 					if ((pos == std::wstring::npos) || (pos == 0)) { throw std::runtime_error("INI_File::Parse: Get Key Error!"); }
-					m_mpNodes[node_name][Trim(line.substr(0, pos))] = Trim(line.substr(pos + 1));
+					Name key = Trim(line.substr(0, pos));
+					m_mpNodes[node_name][key] = Trim(line.substr(pos + 1));
+					// remember definition order (dedup by key)
+					auto& order = m_mpKeyOrder[node_name];
+					if (std::find(order.begin(), order.end(), key) == order.end())
+						order.push_back(key);
 				}
 				break;
 				}
@@ -137,6 +142,31 @@ namespace Rcf
 
 			vOut = ite_keys->second;
 			return true;
+		}
+
+		std::vector<std::pair<Name, Value>> INI_File::GetOrdered(const std::wstring& wsNode)
+		{
+			std::vector<std::pair<Name, Value>> vOut;
+
+			auto ite_node = At(wsNode);
+			if (ite_node == End()) { return vOut; }
+
+			auto ite_order = m_mpKeyOrder.find(wsNode);
+			if (ite_order == m_mpKeyOrder.end())
+			{
+				// Fallback: unordered iteration (order not recorded).
+				for (auto& kv : ite_node->second) vOut.emplace_back(kv.first, kv.second);
+				return vOut;
+			}
+
+			vOut.reserve(ite_order->second.size());
+			for (const Name& key : ite_order->second)
+			{
+				auto ite_keys = ite_node->second.find(key);
+				if (ite_keys != ite_node->second.end())
+					vOut.emplace_back(ite_keys->first, ite_keys->second);
+			}
+			return vOut;
 		}
 	}
 }

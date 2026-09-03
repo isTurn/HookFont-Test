@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <fstream>
+#include <vector>
 #include <unordered_map>
 
 #include "INI_Value.h"
@@ -20,6 +21,8 @@ namespace Rcf
 		{
 		private:
 			NodesMap m_mpNodes;
+			// Definition order of keys inside each node (unordered_map does not keep it).
+			std::unordered_map<NodeName, std::vector<Name>> m_mpKeyOrder;
 
 		private:
 			NodesMap::iterator At(const std::wstring& wsNode);
@@ -43,6 +46,9 @@ namespace Rcf
 
 			// Non-throwing read: fills vOut when the key exists, returns false otherwise.
 			bool TryGet(const std::wstring& wsNode, const std::wstring& wsName, Value& vOut);
+
+			// Ordered (definition-order) read of a whole node; empty when the node is missing.
+			std::vector<std::pair<Name, Value>> GetOrdered(const std::wstring& wsNode);
 
 		};
 	}

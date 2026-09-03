@@ -12,6 +12,10 @@ typedef HFONT(WINAPI* pCreateFontIndirectA)(CONST LOGFONTA* lplf);
 typedef HFONT(WINAPI* pCreateFontIndirectW)(CONST LOGFONTW* lplf);
 
 typedef HWND(WINAPI* pCreateWindowExA)(DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName, DWORD dwStyle, INT X, INT Y, INT nWidth, INT nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
+typedef HWND(WINAPI* pCreateWindowExW)(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, INT X, INT Y, INT nWidth, INT nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
+
+typedef BOOL(WINAPI* pSetWindowTextA)(HWND hWnd, LPCSTR lpString);
+typedef BOOL(WINAPI* pSetWindowTextW)(HWND hWnd, LPCWSTR lpString);
 
 typedef DWORD(WINAPI* pGetGlyphOutlineA)(HDC hdc, UINT uChar, UINT fuFormat, LPGLYPHMETRICS lpgm, DWORD cjBuffer, LPVOID pvBuffer, MAT2* lpmat2);
 

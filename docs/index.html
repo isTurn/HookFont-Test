@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HookFont — 日系 Galgame 字体替换 / 汉化工具链</title>
-<meta name="description" content="双击启动器即完成游戏字体替换：Detours 挂起创建游戏进程并注入 Hook DLL，Hook GDI 四个字体创建 API 与 DirectWrite 引擎，强制替换字符集与字体，让日文游戏正确显示中文。支持 [FontMap] 字体映射表与候选字体回退。">
+<meta name="description" content="双击启动器即完成游戏字体替换：Detours 挂起创建游戏进程并注入 Hook DLL，Hook GDI 四个字体创建 API、DirectWrite（CreateTextFormat/CreateTextLayout）与 GDI+，强制替换字符集与字体，让日文游戏正确显示中文。支持 [FontMap] 通配映射、候选字体回退与 fonts\\ 目录自动安装字体。">
 <meta name="theme-color" content="#14110e">
 <meta property="og:title" content="HookFont — 日系 Galgame 字体替换 / 汉化工具链">
-<meta property="og:description" content="Detours 注入 + Hook GDI/DirectWrite 字体 API，强制替换字符集与字体，让日文游戏正确显示中文。支持字体映射表与候选字体回退。">
+<meta property="og:description" content="Detours 注入 + Hook GDI/DirectWrite/GDI+ 字体 API，强制替换字符集与字体，让日文游戏正确显示中文。支持通配映射、候选回退与字体自动安装。">
 <meta property="og:type" content="website">
 <style>
   :root {
@@ -227,7 +227,7 @@
       <img alt="C++" src="https://img.shields.io/badge/Lang-C%2B%2B%20%2F%20Detours-00599C?style=flat-square&logo=cplusplus">
     </div>
     <h1>Hook<span class="grad">Font</span> 字体替换引擎</h1>
-    <p class="sub">日系 Galgame 字体替换 / 汉化工具链 —— 双击启动器，Detours <b>挂起创建游戏进程</b>并注入 Hook DLL，Hook GDI 与 <b>DirectWrite</b> 字体创建 API，强制替换字符集与字体，让日文游戏正确显示中文。</p>
+    <p class="sub">日系 Galgame 字体替换 / 汉化工具链 —— 双击启动器，Detours <b>挂起创建游戏进程</b>并注入 Hook DLL，Hook GDI、<b>DirectWrite</b> 与 <b>GDI+</b> 字体创建 API，强制替换字符集与字体，让日文游戏正确显示中文。</p>
     <div class="cta">
       <a class="btn btn-primary" href="https://github.com/isTurn/HookFont-Test/releases" target="_blank" rel="noopener"><span class="ico">⬇</span> 下载 Release</a>
       <a class="btn btn-ghost" href="https://github.com/isTurn/HookFont-Test" target="_blank" rel="noopener"><span class="ico">⌥</span> 查看源码</a>
@@ -245,14 +245,16 @@
     </div>
     <div class="feat-grid">
       <div class="feat"><div class="f-ico">🈶</div><h3>强制字体替换</h3><p>Hook <code>CreateFontA/W</code>、<code>CreateFontIndirectA/W</code> 四个 GDI 字体创建 API，统一替换为配置的字符集 + 字体。</p></div>
-      <div class="feat"><div class="f-ico">🎨</div><h3>DirectWrite 引擎</h3><p>Hook <code>IDWriteFactory::CreateTextFormat</code>（vtable 补丁，无 dwrite.lib 依赖），覆盖 WPF / Unity 等现代渲染引擎游戏。</p></div>
-      <div class="feat"><div class="f-ico">🗺️</div><h3>字体映射表</h3><p><code>[FontMap]</code> 段支持"原字体名 → 新字体名"精确替换，优先于全局替换，避免误伤系统界面字体。</p></div>
+      <div class="feat"><div class="f-ico">🎨</div><h3>DirectWrite 补全</h3><p>Hook <code>IDWriteFactory::CreateTextFormat</code>、<code>CreateTextLayout</code> 与 <code>IDWriteTextLayout::SetFontFamilyName</code>（vtable 补丁，无 dwrite.lib 依赖），覆盖 WPF / Unity 等现代引擎，运行时改字体也生效。</p></div>
+      <div class="feat"><div class="f-ico">🖌️</div><h3>GDI+ 支持</h3><p>Hook <code>GdipCreateFontFamilyFromName</code>，少数老游戏 / 引擎走 GDI+ 创建字体，同样被替换。</p></div>
+      <div class="feat"><div class="f-ico">🗺️</div><h3>字体映射表</h3><p><code>[FontMap]</code> 段支持"原字体名 → 新字体名"替换，优先于全局替换；支持 <code>*</code> / <code>?</code> 通配符模糊匹配（精确优先）。</p></div>
       <div class="feat"><div class="f-ico">⛓️</div><h3>候选字体回退</h3><p><code>FontName</code> 支持逗号分隔候选列表（含全角逗号），自动选用第一个系统已安装的字体。</p></div>
+      <div class="feat"><div class="f-ico">📦</div><h3>字体自动安装</h3><p>把 <code>*.ttf/*.ttc/*.otf</code> 放进 DLL 同目录 <code>fonts\</code>，启动时自动 <code>AddFontResource</code> 注册，免手动安装、免管理员权限。</p></div>
       <div class="feat"><div class="f-ico">🚀</div><h3>Detours 注入</h3><p>基于 Microsoft Detours 挂起创建目标进程并注入 DLL，稳定可靠；DLL 自身目录解析 INI，不依赖工作目录。</p></div>
       <div class="feat"><div class="f-ico">💉</div><h3>注入已运行进程</h3><p><code>HookFont.exe -pid &lt;PID&gt;</code> 直接向已运行进程注入——Steam / 官方启动器拉起游戏、或需进主菜单后再挂补丁的场景。</p></div>
       <div class="feat"><div class="f-ico">⌨️</div><h3>命令行启动</h3><p><code>HookFont.exe &lt;game.exe&gt; [参数...]</code> 直接指定游戏并透传启动参数，无需改 ini。</p></div>
       <div class="feat"><div class="f-ico">🧩</div><h3>x86 / x64 双平台</h3><p>32 位与 64 位游戏均可使用，仓库附带 Detours x86 + x64 双平台静态库。</p></div>
-      <div class="feat"><div class="f-ico">🪟</div><h3>窗口标题替换</h3><p>可选将游戏窗口标题替换为任意文本（翻译补丁常用），<code>HookTitleExA</code> 已接通。</p></div>
+      <div class="feat"><div class="f-ico">🪟</div><h3>窗口标题替换</h3><p>Hook <code>CreateWindowExA/W</code> 与 <code>SetWindowTextA/W</code> 四 API，创建窗口与运行时改标题都被替换（宽字符安全）。</p></div>
       <div class="feat"><div class="f-ico">📁</div><h3>中文路径兼容</h3><p>EXE / DLL 路径自动转 8.3 短路径，中文目录 / 文件名完全兼容。</p></div>
       <div class="feat"><div class="f-ico">⏳</div><h3>延迟 Hook</h3><p>从工作线程延迟执行 Hook，规避加载器锁死锁风险，<code>DisableThreadLibraryCalls</code> 已启用。</p></div>
       <div class="feat"><div class="f-ico">📜</div><h3>日志排查</h3><p>运行日志落盘（<code>HookFont.log</code>），失败原因可追查，不弹窗卡游戏。</p></div>
@@ -328,11 +330,14 @@
 <span class="k">HookCreateFontIndirectA</span> = <span class="s">true</span>
 <span class="k">HookCreateFontW</span> = <span class="s">true</span>
 <span class="k">HookCreateFontIndirectW</span> = <span class="s">true</span>
-<span class="k">HookDirectWrite</span> = <span class="s">true</span>            <span class="c"># WPF/Unity 等现代引擎</span>
+<span class="k">HookDirectWrite</span> = <span class="s">true</span>            <span class="c"># WPF/Unity 等现代引擎（含 CreateTextLayout）</span>
+<span class="k">HookGdiplus</span> = <span class="s">true</span>               <span class="c"># GDI+ 老游戏/引擎</span>
+<span class="k">AutoInstallFonts</span> = <span class="s">true</span>          <span class="c"># 自动注册 fonts\ 目录字体</span>
 <span class="k">HookWindowTitle</span> = <span class="s">false</span>
 
-<span class="k">[FontMap]</span>                          <span class="c"># 按字体精确替换，优先于全局</span>
-<span class="k">MS Gothic</span> = <span class="s">黑体</span></pre>
+<span class="k">[FontMap]</span>                          <span class="c"># 按字体替换，优先于全局；支持通配</span>
+<span class="k">MS Gothic</span> = <span class="s">黑体</span>
+<span class="k">MS*</span> = <span class="s">黑体</span>                      <span class="c"># 通配：所有 MS 开头的字体</span></pre>
   </div>
 </section>
 
@@ -352,7 +357,7 @@
       <div class="farrow">↓</div>
       <div class="fnode"><span class="step">4 · 延迟 Hook</span><b>工作线程 DetourAttach</b><span class="d">规避加载器锁死锁；DisableThreadLibraryCalls</span></div>
       <div class="farrow">↓</div>
-      <div class="fnode"><span class="step">5 · 强制替换</span><b>GDI 四 API + DirectWrite</b><span class="d">按 [FontMap] 映射 / 候选列表解析目标字体</span></div>
+      <div class="fnode"><span class="step">5 · 强制替换</span><b>GDI 四 API + DirectWrite + GDI+</b><span class="d">按 [FontMap] 通配映射 / 候选列表解析目标字体</span></div>
       <div class="farrow">↓</div>
       <div class="fnode"><span class="step">6 · 正确显示</span><b>Charset=0x86 + 指定字体</b><span class="d">日文游戏界面正常显示简体中文</span></div>
     </div>
@@ -383,14 +388,24 @@
             <td>通过 LOGFONT 创建字体的 GDI 游戏</td>
           </tr>
           <tr>
-            <td><code>IDWriteFactory::CreateTextFormat</code></td>
+            <td><code>IDWriteFactory::CreateTextFormat</code> · <code>CreateTextLayout</code></td>
             <td class="yes">✔ 开启</td>
-            <td>WPF / Unity 等 DirectWrite 现代引擎</td>
+            <td>WPF / Unity 等 DirectWrite 现代引擎（含运行时改字体）</td>
+          </tr>
+          <tr>
+            <td><code>IDWriteTextLayout::SetFontFamilyName</code></td>
+            <td class="yes">✔ 开启</td>
+            <td>DirectWrite 运行时动态改字体名的场景</td>
+          </tr>
+          <tr>
+            <td><code>GdipCreateFontFamilyFromName</code>（GDI+）</td>
+            <td class="yes">✔ 开启</td>
+            <td>少数走 GDI+ 创建字体的老游戏 / 引擎</td>
           </tr>
           <tr>
             <td><code>[FontMap]</code> 字体映射表</td>
             <td class="opt">○ 可选</td>
-            <td>按"原字体 → 新字体"精确替换，优先于全局</td>
+            <td>按"原字体 → 新字体"替换，支持 <code>*</code> / <code>?</code> 通配，优先于全局</td>
           </tr>
           <tr>
             <td><code>FontName</code> 候选列表</td>
@@ -398,14 +413,19 @@
             <td>逗号分隔，自动回退到首个已安装字体</td>
           </tr>
           <tr>
+            <td><code>fonts\</code> 目录自动安装</td>
+            <td class="yes">✔ 默认</td>
+            <td>启动时 <code>AddFontResource</code> 注册目录内 ttf/ttc/otf，免手动安装</td>
+          </tr>
+          <tr>
             <td><code>-pid</code> 注入已运行进程</td>
             <td class="opt">○ 可选</td>
             <td>Steam / 启动器拉起游戏后再挂补丁（位数需匹配）</td>
           </tr>
           <tr>
-            <td><code>HookTitleExA</code> 窗口标题</td>
+            <td>窗口标题替换（CreateWindowEx + SetWindowText）</td>
             <td class="opt">○ 可选</td>
-            <td>翻译补丁常用的窗口标题替换</td>
+            <td>翻译补丁常用；创建窗口与运行时改标题都生效</td>
           </tr>
           <tr>
             <td>位图自绘字体（部分引擎）</td>
@@ -442,9 +462,9 @@ git push origin main</pre>
     </div>
     <div class="notice">
       <div class="note"><b>位数需匹配</b> — 32 位游戏用 x86 版，64 位游戏用 x64 版；<code>-pid</code> 注入时目标进程位数也必须与启动器一致。</div>
-      <div class="note"><b>字体需已安装</b> — <code>FontName</code> / 映射目标必须是系统已安装字体，否则自动回退到下一个候选。</div>
+      <div class="note"><b>字体可自动安装</b> — <code>FontName</code> / 映射目标若系统没装，把字体文件放进游戏目录 <code>fonts\</code> 子目录即可自动注册，无需手动安装。</div>
       <div class="note"><b>杀软可能告警</b> — Detours 注入 DLL 是常见手法，部分杀毒软件会提示，需放行。</div>
-      <div class="note"><b>个别游戏可调参</b> — 若 W 版 Hook 导致崩溃，可单独关闭 <code>HookCreateFontW</code> 试。</div>
+      <div class="note"><b>个别游戏可调参</b> — 若 W 版 Hook 导致崩溃，可单独关闭 <code>HookCreateFontW</code>；极端冲突也可试关 <code>HookDirectWrite</code> / <code>HookGdiplus</code>。</div>
       <div class="note"><b>请合法使用</b> — 仅用于你有权操作的游戏（汉化补丁、自用调试等场景）。</div>
     </div>
   </div>

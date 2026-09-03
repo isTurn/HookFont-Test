@@ -23,14 +23,16 @@
 ## ✨ 特性
 
 - **强制字体替换**：Hook `CreateFontA/W`、`CreateFontIndirectA/W` 四个 GDI 字体创建 API，统一替换为配置的字符集（默认 `0x86` GB2312）+ 字体
-- **DirectWrite 支持**：额外 Hook `IDWriteFactory::CreateTextFormat`，覆盖 WPF / Unity 等现代渲染引擎的游戏
-- **字体映射表**：`[FontMap]` 段支持"原字体名 → 新字体名"精确替换，优先于全局替换
+- **DirectWrite 补全**：Hook `IDWriteFactory::CreateTextFormat`、`CreateTextLayout` / `CreateGdiCompatibleTextLayout` 及 `IDWriteTextLayout::SetFontFamilyName`，完整覆盖 WPF / Unity 等现代渲染引擎游戏（运行中改字体也生效）
+- **GDI+ 支持**：Hook `GdipCreateFontFamilyFromName`，覆盖少数走 GDI+ 创建字体的老游戏 / 引擎
+- **字体自动安装**：把字体文件放进 DLL 同目录 `fonts\`（`*.ttf/*.ttc/*.otf`），启动时自动 `AddFontResource` 注册，无需手动安装、免管理员权限
+- **字体映射表**：`[FontMap]` 段支持"原字体名 → 新字体名"替换，优先于全局替换；支持 `*` / `?` 通配符模糊匹配（精确匹配优先）
 - **候选字体回退**：`FontName` 支持逗号分隔的候选列表，自动选用第一个系统已安装的字体
 - **Detours 注入**：基于 Microsoft Detours 挂起创建目标进程并注入 DLL，稳定可靠
 - **注入已运行进程**：`HookFont.exe -pid <PID>` 直接向已运行的进程注入（Steam / 官方启动器拉起游戏、需进主菜单后再挂补丁等场景）
 - **命令行启动**：`HookFont.exe <game.exe> [参数...]` 直接指定要启动的游戏并透传启动参数，无需改 ini
 - **x86 / x64 双平台**：32 位与 64 位游戏均可使用，仓库附带 Detours x86 + x64 静态库
-- **窗口标题替换**：可选将游戏窗口标题替换为任意文本
+- **窗口标题替换**：Hook `CreateWindowExA/W` + `SetWindowTextA/W`，创建窗口与运行时改标题都会被替换（宽字符安全）
 - **免配置环境**：配置按程序自身目录解析，不依赖当前工作目录；中文路径自动转 8.3 短路径
 - **延迟 Hook**：从工作线程延迟执行 Hook，规避加载器锁死锁风险
 - **日志排查**：运行日志落盘（`HookFont.log`），异常可追查，不弹窗卡游戏
@@ -60,15 +62,18 @@ HookFont.sln
 ```mermaid
 flowchart LR
     A[双击 HookFont.exe] --> B[读取同目录 HookFont.ini]
-    B --> C[Detours 挂起创建游戏进程<br/>并注入 HookFont.dll]
+    B --> B2[自动注册 fonts\\ 目录字体]
+    B2 --> C[Detours 挂起创建游戏进程<br/>并注入 HookFont.dll]
     C --> D[HookFont.dll 加载]
     D --> E[工作线程延迟执行 Hook]
     E --> F[Hook CreateFontA/W<br/>CreateFontIndirectA/W]
-    E --> G[Hook IDWriteFactory<br/>CreateTextFormat]
-    F --> H[按 FontMap 映射 / 候选字体<br/>强制替换字符集 + 字体]
+    E --> G[Hook DirectWrite<br/>CreateTextFormat / CreateTextLayout]
+    E --> G2[Hook GDI+<br/>GdipCreateFontFamilyFromName]
+    F --> H[按 FontMap 映射（含通配）/ 候选字体<br/>强制替换字符集 + 字体]
     G --> H
+    G2 --> H
     H --> I[日文游戏正确显示中文]
-    E --> J[可选：替换窗口标题]
+    E --> J[可选：替换窗口标题<br/>CreateWindowEx + SetWindowText]
 ```
 
 ## 🚀 使用（部署给玩家）
@@ -98,10 +103,13 @@ HookCreateFontIndirectA = true
 HookCreateFontW = true
 HookCreateFontIndirectW = true
 HookDirectWrite = true
+HookGdiplus = true
+AutoInstallFonts = true
 HookWindowTitle = false
 
 [FontMap]
 MS Gothic = 黑体
+MS* = 黑体        ; 通配符：所有 MS 开头的字体都换成黑体
 ```
 
 > 详细部署与排查说明见 [USAGE.txt](USAGE.txt)。
@@ -150,8 +158,12 @@ MSBuild.exe HookFont.sln /t:Rebuild /p:Configuration=Release /p:Platform=x64
 - Hook 从 `DllMain` 内直接执行改为**工作线程延迟执行**，避免加载器锁死锁风险，并调用 `DisableThreadLibraryCalls`
 - 新增 `CreateFontW` / `CreateFontIndirectW` 两个 Unicode 版 Hook；接通原本已实现但未接线的窗口标题替换 `HookTitleExA`
 - 新增 **DirectWrite 引擎支持**（`IDWriteFactory::CreateTextFormat` vtable Hook，无 dwrite.lib 依赖），覆盖 WPF/Unity 等现代引擎游戏
-- 新增 **`[FontMap]` 字体映射表**：按"原字体名 → 新字体名"精确替换，优先于全局替换
+- 新增 **DirectWrite 补全**：`CreateTextLayout` / `CreateGdiCompatibleTextLayout` 与 `IDWriteTextLayout::SetFontFamilyName`（运行时改字体也替换）
+- 新增 **GDI+ 支持**：Hook `GdipCreateFontFamilyFromName`
+- 新增 **字体自动安装**：DLL 同目录 `fonts\` 子目录字体自动 `AddFontResource` 注册
+- 新增 **`[FontMap]` 字体映射表**：按"原字体名 → 新字体名"替换，优先于全局替换；支持 `*` / `?` 通配模糊匹配（保序、精确优先）
 - 新增 **候选字体回退**：`FontName` 支持逗号分隔列表，自动选用第一个已安装字体
+- 窗口标题替换升级为 **`CreateWindowExA/W` + `SetWindowTextA/W` 四 API 宽字符 Hook**，运行中改标题也生效
 - 新增 **注入已运行进程**（`-pid`）与**命令行启动 / 参数透传**
 - 新增 **x64 支持**：附带 Detours x64 静态库，`Release | x64` 开箱即用
 - 注入 DLL 内的失败提示由弹窗改为**日志文件**，避免弹窗卡死游戏

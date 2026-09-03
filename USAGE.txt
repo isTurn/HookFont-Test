@@ -9,6 +9,11 @@
    （x86 版用于 32 位游戏，x64 版用于 64 位游戏；Release 压缩包内分 x86/ 与 x64/ 两个目录）
    （不要改名；若改名，则 .ini 必须与 .dll/.exe 同名，且保持 UTF-8 编码）
 
+   （可选）字体自动安装：若目标字体（FontName / FontMap 里写的）系统没装，
+   可以在游戏目录下新建 fonts\ 文件夹，把字体文件（*.ttf / *.ttc / *.otf）放进去。
+   启动时会自动 AddFontResource 注册，无需手动安装、不需要管理员权限。
+   不需要这个功能就直接不建 fonts\ 文件夹，或把 AutoInstallFonts 设为 false。
+
 2. 用记事本打开 HookFont.ini 配置：
    [RiaLoader] 段
      TargetEXE      = 游戏主程序文件名（如 ojyousama.exe）
@@ -22,25 +27,38 @@
 
    [HookFont] 段
      Charset  = 0x86   （0x86=GB2312 简体中文，0x81=日文，1=系统默认）
-     FontName = 黑体    （替换成的字体名，需系统已安装）
+     FontName = 黑体    （替换成的字体名，需系统已安装，或已通过 fonts\ 自动安装）
                 支持候选列表：用逗号分隔，自动选用第一个系统已安装的字体
                 （例：FontName = 黑体, 微软雅黑, 宋体）
      HookCreateFontA / HookCreateFontIndirectA / HookCreateFontW / HookCreateFontIndirectW
               = true / false （是否 Hook 对应的 GDI 字体创建 API，一般全开）
      HookDirectWrite = true  （是否 Hook DirectWrite 引擎；WPF/Unity 等现代
                 引擎游戏走 DirectWrite，开启后也能被替换，默认开启）
+                含 CreateTextFormat / CreateTextLayout / SetFontFamilyName，
+                运行时动态改字体也会被替换）
+     HookGdiplus = true   （是否 Hook GDI+（GdipCreateFontFamilyFromName）；
+                少数老游戏/引擎走 GDI+ 创建字体，默认开启，无副作用）
+     AutoInstallFonts = true （是否自动注册 DLL 同目录 fonts\ 子目录的字体，
+                默认开启；不需要可设 false）
      可选窗口标题替换：
        HookWindowTitle = false
        RawWindowTitle  = 原标题
        NewWindowTitle  = 新标题
+     说明：会同时 Hook CreateWindowExA/W 与 SetWindowTextA/W，
+     游戏创建窗口时和运行时改标题都会被替换（宽字符安全）。
 
-   [FontMap] 段（可选，按"原字体名 → 新字体名"精确替换）
+   [FontMap] 段（可选，按"原字体名 → 新字体名"替换）
      键 = 游戏请求的字体名，值 = 替换成的字体（值也可写候选列表）
      命中这里的字体优先于上面 FontName 的全局替换；未命中的字体仍走全局替换。
      典型用途：只把日文字体（MS Gothic / 游明朝 等）换成中文字体，避免误伤系统界面。
+     支持通配符：* 匹配任意字符序列，? 匹配单个字符（不区分大小写）。
+     精确匹配优先于通配匹配；多个通配都命中时取配置中最先写的那条。
      例：
        [FontMap]
-       MS Gothic = 黑体
+       MS Gothic = 黑体        ; 精确：只换 MS Gothic
+       MS* = 黑体              ; 通配：所有 MS 开头的字体都换黑体
+       *Gothic* = 黑体         ; 通配：包含 Gothic 的字体都换黑体
+     想"只替换命中的字体、其余保持原样"：把 FontName 留空即可。
 
 3. 双击 HookFont.exe 启动游戏。
 
@@ -61,9 +79,12 @@
 - 游戏目录含中文等特殊字符路径时程序会自动处理，一般无需担心。
 
 三、常见问题
-- 字体没变：检查 [HookFont] 段是否存在、FontName 是否正确安装。
-- 个别字体想换、但不想全局替换：在 [FontMap] 里加"原字体名 = 新字体名"，
+- 字体没变：检查 [HookFont] 段是否存在、FontName 是否正确安装（或已放入 fonts\ 目录自动安装）。
+- 个别字体想换、但不想全局替换：在 [FontMap] 里加"原字体名 = 新字体名"（支持 * / ? 通配），
   并把 FontName 留空即可（这样只有命中的字体被替换）。
-- 某游戏崩溃：可尝试把 HookCreateFontW / HookCreateFontIndirectW 改为 false 试试。
+- 某游戏崩溃：可尝试把 HookCreateFontW / HookCreateFontIndirectW 改为 false 试试；
+  极少情况下 GDI+ 或 DirectWrite Hook 与游戏冲突，可把 HookGdiplus / HookDirectWrite 设为 false 排查。
 - 游戏用的是 WPF/Unity 等现代引擎还是没替换：确认 HookDirectWrite = true。
-- 旧版只有 A 版 Hook：新版默认同时 Hook A 与 W 版，并支持 DirectWrite，覆盖更全。
+- 目标字体系统没装、又不想手动装：把字体文件放进游戏目录 fonts\ 子目录即可自动注册。
+- 游戏动态改字体（运行时换字体）没替换：新版已覆盖 IDWriteTextLayout::SetFontFamilyName，无需额外配置。
+- 旧版只有 A 版 Hook：新版默认同时 Hook A 与 W 版，并支持 DirectWrite / GDI+，覆盖更全。
