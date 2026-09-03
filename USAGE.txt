@@ -36,8 +36,13 @@
                 引擎游戏走 DirectWrite，开启后也能被替换，默认开启）
                 含 CreateTextFormat / CreateTextLayout / SetFontFamilyName，
                 运行时动态改字体也会被替换）
-     HookGdiplus = true   （是否 Hook GDI+（GdipCreateFontFamilyFromName）；
-                少数老游戏/引擎走 GDI+ 创建字体，默认开启，无副作用）
+     HookGdiplus = true   （是否 Hook GDI+ 全链路：GdipCreateFontFamilyFromName /
+                GdipCreateFont（family+size 一步建字体，含缓存 family）/
+                GdipCreateFontFromLogfontA/W。默认开启，无副作用）
+     字体缺失检测（无开关，始终执行）：
+       启动时校验 FontName 与 [FontMap] 每个目标字体是否已安装，
+       缺失会在 HookFont.log 输出 [FontCheck] MISSING 告警，便于排查
+       “字体没换过来”的原因。
      AutoInstallFonts = true （是否自动注册 DLL 同目录 fonts\ 子目录的字体，
                 默认开启；不需要可设 false）
      可选窗口标题替换：

@@ -28,6 +28,13 @@ namespace Rut
 		//                    Takes precedence over the global list.
 		void ConfigureFontReplace(uint32_t uiCharSet, const std::wstring& wsFontNameList, const FontMapListT& vFontMap);
 
+		// Diagnostics: report via the log callback every configured target font
+		// (global FontName candidates + every [FontMap] value) that is NOT present
+		// on the system — so "why didn't it switch?" questions get answered fast.
+		// Call after ConfigureFontReplace (and after any fonts\ auto-install so
+		// session-registered fonts are visible). Returns the number of missing fonts.
+		int CheckFontAvailability(const std::wstring& wsFontNameList, const FontMapListT& vFontMap);
+
 		// Attach the four GDI font-creation hooks (state configured via ConfigureFontReplace).
 		// Return: true on success, false on failure.
 		bool HookCreateFontA();

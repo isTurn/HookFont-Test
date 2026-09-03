@@ -24,7 +24,8 @@
 
 - **强制字体替换**：Hook `CreateFontA/W`、`CreateFontIndirectA/W` 四个 GDI 字体创建 API，统一替换为配置的字符集（默认 `0x86` GB2312）+ 字体
 - **DirectWrite 补全**：Hook `IDWriteFactory::CreateTextFormat`、`CreateTextLayout` / `CreateGdiCompatibleTextLayout` 及 `IDWriteTextLayout::SetFontFamilyName`，完整覆盖 WPF / Unity 等现代渲染引擎游戏（运行中改字体也生效）
-- **GDI+ 支持**：Hook `GdipCreateFontFamilyFromName`，覆盖少数走 GDI+ 创建字体的老游戏 / 引擎
+- **GDI+ 支持**：Hook `GdipCreateFontFamilyFromName`、`GdipCreateFont`（family+size 一步建字体的缓存 family 场景）与 `GdipCreateFontFromLogfontA/W`，完整覆盖走 GDI+ 创建字体的老游戏 / 引擎
+- **字体缺失检测**：启动时校验全局 `FontName` 与 `[FontMap]` 每个目标字体是否真的已安装，缺失在 `HookFont.log` 标 `[FontCheck]` 告警——"字体没换过来"一眼定位
 - **字体自动安装**：把字体文件放进 DLL 同目录 `fonts\`（`*.ttf/*.ttc/*.otf`），启动时自动 `AddFontResource` 注册，无需手动安装、免管理员权限
 - **字体映射表**：`[FontMap]` 段支持"原字体名 → 新字体名"替换，优先于全局替换；支持 `*` / `?` 通配符模糊匹配（精确匹配优先）
 - **候选字体回退**：`FontName` 支持逗号分隔的候选列表，自动选用第一个系统已安装的字体
@@ -70,7 +71,7 @@ flowchart LR
     D --> E[工作线程延迟执行 Hook]
     E --> F[Hook CreateFontA/W<br/>CreateFontIndirectA/W]
     E --> G[Hook DirectWrite<br/>CreateTextFormat / CreateTextLayout]
-    E --> G2[Hook GDI+<br/>GdipCreateFontFamilyFromName]
+    E --> G2[Hook GDI+<br/>CreateFontFamily/CreateFont/FromLogfont]
     F --> H[按 FontMap 映射（含通配）/ 候选字体<br/>强制替换字符集 + 字体]
     G --> H
     G2 --> H
@@ -106,7 +107,7 @@ HookCreateFontIndirectA = true
 HookCreateFontW = true
 HookCreateFontIndirectW = true
 HookDirectWrite = true
-HookGdiplus = true
+HookGdiplus = true            ; GDI+ 引擎（CreateFontFamily/FromLogfont 全补全）
 AutoInstallFonts = true
 HookWindowTitle = false
 HookTextOut = false        ; 字符级替换开关（配合下方 [CharMap]）
@@ -169,7 +170,8 @@ MSBuild.exe HookFont.sln /t:Rebuild /p:Configuration=Release /p:Platform=x64
 - 新增 `CreateFontW` / `CreateFontIndirectW` 两个 Unicode 版 Hook；接通原本已实现但未接线的窗口标题替换 `HookTitleExA`
 - 新增 **DirectWrite 引擎支持**（`IDWriteFactory::CreateTextFormat` vtable Hook，无 dwrite.lib 依赖），覆盖 WPF/Unity 等现代引擎游戏
 - 新增 **DirectWrite 补全**：`CreateTextLayout` / `CreateGdiCompatibleTextLayout` 与 `IDWriteTextLayout::SetFontFamilyName`（运行时改字体也替换）
-- 新增 **GDI+ 支持**：Hook `GdipCreateFontFamilyFromName`
+- 新增 **GDI+ 支持**：Hook `GdipCreateFontFamilyFromName`（后续补全 `GdipCreateFont` 与 `GdipCreateFontFromLogfontA/W`）
+- 新增 **字体缺失检测**：启动时校验目标字体是否已安装，缺失日志标 `[FontCheck]` 告警
 - 新增 **字体自动安装**：DLL 同目录 `fonts\` 子目录字体自动 `AddFontResource` 注册
 - 新增 **`[FontMap]` 字体映射表**：按"原字体名 → 新字体名"替换，优先于全局替换；支持 `*` / `?` 通配模糊匹配（保序、精确优先）
 - 新增 **候选字体回退**：`FontName` 支持逗号分隔列表，自动选用第一个已安装字体

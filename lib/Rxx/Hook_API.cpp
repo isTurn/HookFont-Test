@@ -168,6 +168,40 @@ namespace Rut
 			return wsRequested;
 		}
 
+		// Like ResolveFontNameW but ONLY consults [FontMap] (exact then wildcard);
+		// never applies the global replacement. Used to detect "original family
+		// name" in GdipCreateFont without double-mapping an already-replaced name.
+		static const wchar_t* ResolveFontMapOnlyW(const wchar_t* wsRequested)
+		{
+			if (!wsRequested) return wsRequested;
+
+			std::wstring wsReq = TrimW(wsRequested);
+			const std::wstring* pMapVal = NULL;
+
+			for (const auto& kv : sg_vFontMap) // pass 1: exact (non-wildcard) keys
+			{
+				bool bWild = (kv.first.find(L'*') != std::wstring::npos || kv.first.find(L'?') != std::wstring::npos);
+				if (!bWild && _wcsicmp(kv.first.c_str(), wsReq.c_str()) == 0) { pMapVal = &kv.second; break; }
+			}
+			if (!pMapVal)
+			{
+				for (const auto& kv : sg_vFontMap) // pass 2: wildcard keys, first hit wins
+				{
+					bool bWild = (kv.first.find(L'*') != std::wstring::npos || kv.first.find(L'?') != std::wstring::npos);
+					if (bWild && WildcardMatchW(kv.first.c_str(), wsReq.c_str())) { pMapVal = &kv.second; break; }
+				}
+			}
+
+			if (pMapVal)
+			{
+				std::vector<std::wstring> vCand;
+				ParseCandidateList(*pMapVal, vCand);
+				tls_wsResultW = ResolveFirstInstalled(vCand);
+				if (!tls_wsResultW.empty()) return tls_wsResultW.c_str();
+			}
+			return wsRequested;
+		}
+
 		static const char* ResolveFontNameA(const char* cpRequested)
 		{
 			if (!cpRequested) return cpRequested;
@@ -546,12 +580,29 @@ namespace Rut
 
 
 		//=====================================================================
-		// GDI+ support: hook GdipCreateFontFamilyFromName so GDI+ based engines
+		// GDI+ support: hook the family-name entry points so GDI+ based engines
 		// get the same font replacement.
+		//   - GdipCreateFontFamilyFromName : name-based (already hooked)
+		//   - GdipCreateFont                : family+size one-step; the family may
+		//                                     have been cached before our hook ran,
+		//                                     so re-verify its name and rebuild it
+		//                                     through the raw family creator when it
+		//                                     still matches a replacement rule.
+		//   - GdipCreateFontFromLogfontA/W : LOGFONT-based (like CreateFontIndirect)
 		//=====================================================================
 		typedef INT(WINAPI* pGdipCreateFontFamilyFromName)(const WCHAR* name, void* fontCollection, void** fontFamily);
+		typedef INT(WINAPI* pGdipCreateFont)(void* fontFamily, float emSize, INT style, INT unit, void** font);
+		typedef INT(WINAPI* pGdipGetFamilyName)(void* fontFamily, WCHAR* name, short lang);
+		typedef INT(WINAPI* pGdipDeleteFontFamily)(void* fontFamily);
+		typedef INT(WINAPI* pGdipCreateFontFromLogfontA)(HDC hdc, const LOGFONTA* logfont, void** font);
+		typedef INT(WINAPI* pGdipCreateFontFromLogfontW)(HDC hdc, const LOGFONTW* logfont, void** font);
 
 		static pGdipCreateFontFamilyFromName g_rawGdipCreateFontFamilyFromName = NULL;
+		static pGdipCreateFont               g_rawGdipCreateFont = NULL;
+		static pGdipGetFamilyName            g_rawGdipGetFamilyName = NULL;
+		static pGdipDeleteFontFamily         g_rawGdipDeleteFontFamily = NULL;
+		static pGdipCreateFontFromLogfontA   g_rawGdipCreateFontFromLogfontA = NULL;
+		static pGdipCreateFontFromLogfontW   g_rawGdipCreateFontFromLogfontW = NULL;
 
 		static INT WINAPI HookGdipCreateFontFamilyFromName(const WCHAR* name, void* fontCollection, void** fontFamily)
 		{
@@ -559,17 +610,71 @@ namespace Rut
 			return g_rawGdipCreateFontFamilyFromName(name, fontCollection, fontFamily);
 		}
 
+		static INT WINAPI HookGdipCreateFont(void* fontFamily, float emSize, INT style, INT unit, void** font)
+		{
+			void* pNewFamily = NULL;
+			void* pEffective = fontFamily;
+
+			// A family created before our hook ran may still carry the original
+			// (Japanese) face name. Re-check it against [FontMap] only and rebuild
+			// through the RAW family creator when it hits a mapping rule; otherwise
+			// use as-is (the name is already the replacement, so no global re-map).
+			if (fontFamily && g_rawGdipGetFamilyName && g_rawGdipCreateFontFamilyFromName)
+			{
+				WCHAR wsName[LF_FACESIZE] = { 0 };
+				if (g_rawGdipGetFamilyName(fontFamily, wsName, 0) == 0) // Ok
+				{
+					const wchar_t* wsRes = ResolveFontMapOnlyW(wsName);
+					if (wsRes != wsName)
+					{
+						if (g_rawGdipCreateFontFamilyFromName(wsRes, NULL, &pNewFamily) == 0 && pNewFamily)
+							pEffective = pNewFamily;
+					}
+				}
+			}
+
+			INT nStatus = g_rawGdipCreateFont(pEffective, emSize, style, unit, font);
+
+			if (pNewFamily && g_rawGdipDeleteFontFamily)
+				g_rawGdipDeleteFontFamily(pNewFamily);
+
+			return nStatus;
+		}
+
+		static INT WINAPI HookGdipCreateFontFromLogfontW(HDC hdc, const LOGFONTW* lf, void** font)
+		{
+			// Pass through: GDI+ internally creates the family through
+			// GdipCreateFontFamilyFromName (already hooked), so replacing the face
+			// here would double-map once the internal call re-runs replacement.
+			return g_rawGdipCreateFontFromLogfontW(hdc, lf, font);
+		}
+
+		static INT WINAPI HookGdipCreateFontFromLogfontA(HDC hdc, const LOGFONTA* lf, void** font)
+		{
+			return g_rawGdipCreateFontFromLogfontA(hdc, lf, font);
+		}
+
 		bool HookGdiplus()
 		{
-			if (g_rawGdipCreateFontFamilyFromName) return true;
+			if (g_rawGdipCreateFontFamilyFromName && g_rawGdipCreateFont) return true;
 
 			HMODULE hGdiplus = LoadLibraryW(L"gdiplus.dll");
 			if (!hGdiplus) return false;
 
 			g_rawGdipCreateFontFamilyFromName = (pGdipCreateFontFamilyFromName)GetProcAddress(hGdiplus, "GdipCreateFontFamilyFromName");
-			if (!g_rawGdipCreateFontFamilyFromName) return false;
+			g_rawGdipCreateFont               = (pGdipCreateFont)GetProcAddress(hGdiplus, "GdipCreateFont");
+			g_rawGdipGetFamilyName            = (pGdipGetFamilyName)GetProcAddress(hGdiplus, "GdipGetFamilyName");
+			g_rawGdipDeleteFontFamily         = (pGdipDeleteFontFamily)GetProcAddress(hGdiplus, "GdipDeleteFontFamily");
+			g_rawGdipCreateFontFromLogfontA   = (pGdipCreateFontFromLogfontA)GetProcAddress(hGdiplus, "GdipCreateFontFromLogfontA");
+			g_rawGdipCreateFontFromLogfontW   = (pGdipCreateFontFromLogfontW)GetProcAddress(hGdiplus, "GdipCreateFontFromLogfontW");
 
-			return DetourAttachFunc(&g_rawGdipCreateFontFamilyFromName, HookGdipCreateFontFamilyFromName);
+			bool ok = true;
+			if (g_rawGdipCreateFontFamilyFromName)  ok = DetourAttachFunc(&g_rawGdipCreateFontFamilyFromName, HookGdipCreateFontFamilyFromName) && ok;
+			if (g_rawGdipCreateFont)                ok = DetourAttachFunc(&g_rawGdipCreateFont, HookGdipCreateFont) && ok;
+			if (g_rawGdipCreateFontFromLogfontA)    ok = DetourAttachFunc(&g_rawGdipCreateFontFromLogfontA, HookGdipCreateFontFromLogfontA) && ok;
+			if (g_rawGdipCreateFontFromLogfontW)    ok = DetourAttachFunc(&g_rawGdipCreateFontFromLogfontW, HookGdipCreateFontFromLogfontW) && ok;
+
+			return ok;
 		}
 		//=====================================================================
 
@@ -793,6 +898,56 @@ namespace Rut
 			return ok;
 		}
 		//*********END Hook GetGlyphOutlineA/W*******
+
+
+		//=====================================================================
+		// Target-font availability diagnostics
+		//=====================================================================
+		int CheckFontAvailability(const std::wstring& wsFontNameList, const FontMapListT& vFontMap)
+		{
+			int nMissing = 0;
+			std::vector<std::wstring> vChecked;
+
+			// global FontName candidates
+			{
+				std::vector<std::wstring> vCand;
+				ParseCandidateList(wsFontNameList, vCand);
+				for (const auto& name : vCand)
+				{
+					std::wstring nm = TrimW(name);
+					if (nm.empty()) continue;
+					vChecked.push_back(nm);
+					if (!IsFontInstalledW(nm.c_str()))
+					{
+						if (sg_pfnLog) sg_pfnLog(L"[FontCheck] MISSING: global FontName \"%ls\" is not installed", nm.c_str());
+						nMissing++;
+					}
+				}
+			}
+
+			// every [FontMap] value (the replacement targets)
+			for (const auto& kv : vFontMap)
+			{
+				std::vector<std::wstring> vCand;
+				ParseCandidateList(kv.second, vCand);
+				for (const auto& name : vCand)
+				{
+					std::wstring nm = TrimW(name);
+					if (nm.empty()) continue;
+					vChecked.push_back(nm);
+					if (!IsFontInstalledW(nm.c_str()))
+					{
+						if (sg_pfnLog) sg_pfnLog(L"[FontCheck] MISSING: FontMap \"%ls\" target \"%ls\" is not installed", kv.first.c_str(), nm.c_str());
+						nMissing++;
+					}
+				}
+			}
+
+			if (sg_pfnLog)
+				sg_pfnLog(L"[FontCheck] %d target font(s) checked, %d missing", (int)vChecked.size(), nMissing);
+
+			return nMissing;
+		}
 		//=====================================================================
 	}
 }

@@ -14,6 +14,7 @@
 #include <windows.h>
 #include <cstdio>
 #include <cwchar>
+#include <string>
 #include <dwrite.h>
 
 #pragma comment(lib, "gdi32.lib")
@@ -261,6 +262,77 @@ static void TestGlyphOutline(const char* tag)
 }
 
 
+// GDI+ one-step paths: GdipCreateFont (family+size, family may be cached) and
+// GdipCreateFontFromLogfontW (LOGFONT-based). The injected DLL replaces the face
+// name, so the resulting font's family name should come back as the mapped font.
+static void TestGdiplusCreate(const wchar_t* request, const char* tag)
+{
+    typedef int (WINAPI* FnStartup)(ULONG_PTR*, const void*, void*);
+    typedef void (WINAPI* FnShutdown)(ULONG_PTR);
+    typedef int (WINAPI* FnCreateFamily)(const WCHAR*, void*, void**);
+    typedef int (WINAPI* FnCreateFont)(void*, float, int, int, void**);
+    typedef int (WINAPI* FnGetFontFamily)(void*, void**);
+    typedef int (WINAPI* FnGetFamilyName)(void*, WCHAR*, WCHAR);
+    typedef int (WINAPI* FnDeleteFont)(void*);
+    typedef int (WINAPI* FnDeleteFamily)(void*);
+    typedef int (WINAPI* FnCreateFontFromLogfontW)(HDC, const LOGFONTW*, void**);
+
+    HMODULE hGdiplus = LoadLibraryW(L"gdiplus.dll");
+    if (!hGdiplus) { WriteResult(tag, 0, L"GDI+_LOAD_FAIL"); return; }
+
+    FnStartup fnStartup = (FnStartup)GetProcAddress(hGdiplus, "GdiplusStartup");
+    FnShutdown fnShutdown = (FnShutdown)GetProcAddress(hGdiplus, "GdiplusShutdown");
+    FnCreateFamily fnCreateFamily = (FnCreateFamily)GetProcAddress(hGdiplus, "GdipCreateFontFamilyFromName");
+    FnCreateFont fnCreateFont = (FnCreateFont)GetProcAddress(hGdiplus, "GdipCreateFont");
+    FnGetFontFamily fnGetFontFamily = (FnGetFontFamily)GetProcAddress(hGdiplus, "GdipGetFamily");
+    FnGetFamilyName fnGetFamilyName = (FnGetFamilyName)GetProcAddress(hGdiplus, "GdipGetFamilyName");
+    FnDeleteFont fnDeleteFont = (FnDeleteFont)GetProcAddress(hGdiplus, "GdipDeleteFont");
+    FnDeleteFamily fnDeleteFamily = (FnDeleteFamily)GetProcAddress(hGdiplus, "GdipDeleteFontFamily");
+    FnCreateFontFromLogfontW fnFromLogW = (FnCreateFontFromLogfontW)GetProcAddress(hGdiplus, "GdipCreateFontFromLogfontW");
+
+    ULONG_PTR token = 0;
+    struct { UINT32 version; void* cb; BOOL suppressBg; BOOL suppressExt; } input = { 1, NULL, FALSE, FALSE };
+    if (!fnStartup || !fnShutdown || !fnCreateFamily || !fnCreateFont || !fnGetFontFamily ||
+        !fnGetFamilyName || !fnDeleteFont || !fnDeleteFamily || !fnFromLogW ||
+        fnStartup(&token, &input, NULL) != 0) { WriteResult(tag, 0, L"GDI+_INIT_FAIL"); return; }
+
+    // --- GdipCreateFont path (family created through GdipCreateFontFamilyFromName) ---
+    void* family = nullptr;
+    void* font = nullptr;
+    wchar_t name1[64] = { 0 };
+    if (fnCreateFamily(request, NULL, &family) != 0 || !family) { wcscpy_s(name1, L"FAMILY_FAIL"); }
+    else if (fnCreateFont(family, 16.0f, 0, 0, &font) != 0 || !font) { wcscpy_s(name1, L"CREATEFONT_FAIL"); }
+    else
+    {
+        void* familyOut = nullptr;
+        if (fnGetFontFamily(font, &familyOut) != 0 || !familyOut) wcscpy_s(name1, L"GETFAM_FAIL");
+        else { fnGetFamilyName(familyOut, name1, 0); fnDeleteFamily(familyOut); }
+        fnDeleteFont(font);
+    }
+    if (family) fnDeleteFamily(family);
+    WriteResult(tag, 0, name1);
+
+    // --- GdipCreateFontFromLogfontW path ---
+    LOGFONTW lf = { 0 };
+    lf.lfHeight = 16;
+    wcscpy_s(lf.lfFaceName, request);
+    void* font2 = nullptr;
+    wchar_t name2[64] = { 0 };
+    if (fnFromLogW(GetDC(NULL), &lf, &font2) != 0 || !font2) { wcscpy_s(name2, L"FROMLOG_FAIL"); }
+    else
+    {
+        void* familyOut2 = nullptr;
+        if (fnGetFontFamily(font2, &familyOut2) != 0 || !familyOut2) wcscpy_s(name2, L"GETFAM_FAIL");
+        else { fnGetFamilyName(familyOut2, name2, 0); fnDeleteFamily(familyOut2); }
+        fnDeleteFont(font2);
+    }
+    std::string tagLog = std::string(tag) + "-Log";
+    WriteResult(tagLog.c_str(), 0, name2);
+
+    fnShutdown(token);
+}
+
+
 int main()
 {
     // give the injected DLL's worker thread time to install the hooks
@@ -281,6 +353,7 @@ int main()
     TestDirectWriteLayout(L"MS Gothic", "DWrite-Layout-Map");
     TestGdiplus(L"Arial", "Gdiplus");
     TestGdiplus(L"MS Gothic", "Gdiplus-Map");
+    TestGdiplusCreate(L"MS Gothic", "GdiplusCreate");
     TestSetWindowTextW("WindowTitle");
     TestTextOut("TextOut");
     TestGlyphOutline("Glyph");

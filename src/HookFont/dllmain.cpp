@@ -117,6 +117,13 @@ static void StartHook()
 
 		ConfigureFontReplace(uiCharSet, wsFontName, vFontMap);
 
+		// Diagnostics: warn loudly when a configured target font is missing, so
+		// "font didn't switch" issues are obvious in the log. Runs after fonts\
+		// auto-install so session-registered fonts count as available.
+		int nMissingFonts = CheckFontAvailability(wsFontName, vFontMap);
+		if (nMissingFonts > 0)
+			LogPrint(L"[FontCheck] %d target font(s) missing — replacement may not apply. Install them or drop files into fonts\\", nMissingFonts);
+
 		// [CharMap] section: single source character -> single target character.
 		// Applied to text drawn via ExtTextOut/TextOut (see HookTextOut below).
 		CharMapT mpChars;
