@@ -24,3 +24,6 @@ test/**/*.dll
 test/**/*.obj
 test/**/*.log
 test/**/*_result.txt
+
+# artifact-preview 渲染缓存
+.preview/
