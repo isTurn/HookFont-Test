@@ -93,6 +93,9 @@ static void StartHook()
 		uint32_t     uiCharSet  = ReadIniKey(keys, L"Charset", (uint32_t)0x86);
 		std::wstring wsFontName = ReadIniKey(keys, L"FontName", std::wstring(L"黑体"));
 
+		// Let the hooks (e.g. [CharMap] replacement) write diagnostics to the log.
+		SetLogCallback(LogPrint);
+
 		// Optional: auto-register fonts shipped in <dll dir>\fonts\ BEFORE resolving
 		// the target fonts, so they become visible to EnumFontFamiliesExW below.
 		if (ReadIniKey(keys, L"AutoInstallFonts", true))
@@ -114,12 +117,25 @@ static void StartHook()
 
 		ConfigureFontReplace(uiCharSet, wsFontName, vFontMap);
 
+		// [CharMap] section: single source character -> single target character.
+		// Applied to text drawn via ExtTextOut/TextOut (see HookTextOut below).
+		CharMapT mpChars;
+		for (auto& kv : ini.GetOrdered(L"CharMap"))
+		{
+			std::wstring key = kv.first; // Name = std::wstring
+			std::wstring val = static_cast<std::wstring>(kv.second);
+			if (key.length() != 1 || val.length() != 1) continue;
+			mpChars[key[0]] = val[0];
+		}
+		ConfigureCharMap(mpChars);
+
 		if (ReadIniKey(keys, L"HookCreateFontA", true))          HookCreateFontA();
 		if (ReadIniKey(keys, L"HookCreateFontIndirectA", true))  HookCreateFontIndirectA();
 		if (ReadIniKey(keys, L"HookCreateFontW", true))          HookCreateFontW();
 		if (ReadIniKey(keys, L"HookCreateFontIndirectW", true))  HookCreateFontIndirectW();
 		if (ReadIniKey(keys, L"HookDirectWrite", true))          HookDirectWrite();
 		if (ReadIniKey(keys, L"HookGdiplus", true))              HookGdiplus();
+		if (ReadIniKey(keys, L"HookTextOut", false))             HookTextOut();
 
 		// Optional: replace the game window title (common in translation patches).
 		if (ReadIniKey(keys, L"HookWindowTitle", false))
@@ -132,7 +148,7 @@ static void StartHook()
 			}
 		}
 
-		LogPrint(L"HookFont initialized. Charset=0x%02X Font=%ls MapEntries=%d", uiCharSet, wsFontName.c_str(), (int)vFontMap.size());
+		LogPrint(L"HookFont initialized. Charset=0x%02X Font=%ls FontMap=%d CharMap=%d", uiCharSet, wsFontName.c_str(), (int)vFontMap.size(), (int)mpChars.size());
 	}
 	catch (const std::exception& err)
 	{

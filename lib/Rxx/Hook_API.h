@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <utility>
+#include <unordered_map>
 
 //Ria's Utility Library X
 namespace Rut
@@ -54,5 +55,28 @@ namespace Rut
 
 		// Backward-compatible ANSI helper (internally converts and calls HookTitleWindow).
 		bool HookTitleExA(const char* cpRawTitle, const char* cpPatchTitle);
+
+		//=====================================================================
+		// Character-level text replacement (ExtTextOut / TextOut)
+		//=====================================================================
+		// Per-character map: source wchar -> target wchar. Any text drawn through
+		// GDI ExtTextOutW/A (TextOutW/A internally route through ExtTextOut and are
+		// therefore covered too) has its characters mapped before drawing. Typical
+		// use: replace Japanese punctuation / kana that a locked engine font cannot
+		// render (e.g. 「」-> “”, あ -> 阿), or force half/full-width variants.
+		// For ExtTextOutA only entries whose value fits a single byte (<= 0xFF) are
+		// applied, byte-by-byte.
+		typedef std::unordered_map<wchar_t, wchar_t> CharMapT;
+
+		// Configure the character replacement table. Call before HookTextOut().
+		void ConfigureCharMap(const CharMapT& mpChars);
+
+		// Attach the ExtTextOutW/A hooks. Requires ConfigureCharMap() first.
+		bool HookTextOut();
+
+		// Optional log sink used by the hooks (dllmain registers its logger here);
+		// hooks call it for diagnostics such as "text replaced". NULL = no logging.
+		typedef void(*LogCallback)(const wchar_t* wsFmt, ...);
+		void SetLogCallback(LogCallback pfn);
 	}
 }

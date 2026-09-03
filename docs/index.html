@@ -255,6 +255,7 @@
       <div class="feat"><div class="f-ico">⌨️</div><h3>命令行启动</h3><p><code>HookFont.exe &lt;game.exe&gt; [参数...]</code> 直接指定游戏并透传启动参数，无需改 ini。</p></div>
       <div class="feat"><div class="f-ico">🧩</div><h3>x86 / x64 双平台</h3><p>32 位与 64 位游戏均可使用，仓库附带 Detours x86 + x64 双平台静态库。</p></div>
       <div class="feat"><div class="f-ico">🪟</div><h3>窗口标题替换</h3><p>Hook <code>CreateWindowExA/W</code> 与 <code>SetWindowTextA/W</code> 四 API，创建窗口与运行时改标题都被替换（宽字符安全）。</p></div>
+      <div class="feat"><div class="f-ico">🔤</div><h3>字符级替换</h3><p><code>[CharMap]</code> 逐字符映射表，文本经 <code>ExtTextOut</code>/<code>TextOut</code> 绘制前逐字替换——引擎锁定字体、字符变豆腐块时的兜底。</p></div>
       <div class="feat"><div class="f-ico">📁</div><h3>中文路径兼容</h3><p>EXE / DLL 路径自动转 8.3 短路径，中文目录 / 文件名完全兼容。</p></div>
       <div class="feat"><div class="f-ico">⏳</div><h3>延迟 Hook</h3><p>从工作线程延迟执行 Hook，规避加载器锁死锁风险，<code>DisableThreadLibraryCalls</code> 已启用。</p></div>
       <div class="feat"><div class="f-ico">📜</div><h3>日志排查</h3><p>运行日志落盘（<code>HookFont.log</code>），失败原因可追查，不弹窗卡游戏。</p></div>
@@ -334,10 +335,15 @@
 <span class="k">HookGdiplus</span> = <span class="s">true</span>               <span class="c"># GDI+ 老游戏/引擎</span>
 <span class="k">AutoInstallFonts</span> = <span class="s">true</span>          <span class="c"># 自动注册 fonts\ 目录字体</span>
 <span class="k">HookWindowTitle</span> = <span class="s">false</span>
+<span class="k">HookTextOut</span> = <span class="s">false</span>             <span class="c"># 字符级替换开关（配合 [CharMap]）</span>
 
 <span class="k">[FontMap]</span>                          <span class="c"># 按字体替换，优先于全局；支持通配</span>
 <span class="k">MS Gothic</span> = <span class="s">黑体</span>
-<span class="k">MS*</span> = <span class="s">黑体</span>                      <span class="c"># 通配：所有 MS 开头的字体</span></pre>
+<span class="k">MS*</span> = <span class="s">黑体</span>                      <span class="c"># 通配：所有 MS 开头的字体</span>
+
+<span class="k">[CharMap]</span>                          <span class="c"># 逐字符替换（ExtTextOut/TextOut 文本）</span>
+<span class="k">「</span> = <span class="s">“</span>                        <span class="c"># 日文左引号 → 中文左引号</span>
+<span class="k">あ</span> = <span class="s">阿</span>                        <span class="c"># 字形近似的假名 → 汉字</span></pre>
   </div>
 </section>
 
@@ -426,6 +432,11 @@
             <td>窗口标题替换（CreateWindowEx + SetWindowText）</td>
             <td class="opt">○ 可选</td>
             <td>翻译补丁常用；创建窗口与运行时改标题都生效</td>
+          </tr>
+          <tr>
+            <td><code>ExtTextOut</code> / <code>TextOut</code> 字符级替换</td>
+            <td class="opt">○ 可选</td>
+            <td><code>[CharMap]</code> 逐字符映射，锁定字体/豆腐块时的兜底</td>
           </tr>
           <tr>
             <td>位图自绘字体（部分引擎）</td>

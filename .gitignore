@@ -31,3 +31,6 @@ test/**/*_result.txt
 # ---- Test font assets (large, system-copied) ----
 test/fonts/
 test/x64/fonts/
+
+# Local helper scripts (TestTarget build wrapper)
+/_build_test.bat

@@ -195,6 +195,40 @@ static void TestSetWindowTextW(const char* tag)
 }
 
 
+// Character-level replacement: draw text through ExtTextOutW / TextOutW / ExtTextOutA
+// onto a memory DC. The injected DLL hooks ExtTextOut and rewrites mapped chars
+// ([CharMap]: 「-> “, あ-> 阿 ...); TextOut routes through ExtTextOut so it is
+// covered too. The rendered glyphs cannot be read back cheaply, so the actual
+// rewrite is verified from the hook's own diagnostics (HookFont.log lines
+// "[CharMap] ExtTextOutW: ... -> ..."); here we just prove the calls succeed and
+// don't crash. ExtTextOutA should be a no-op for non-ASCII maps (values > 0xFF).
+static void TestTextOut(const char* tag)
+{
+    HDC hdc = CreateCompatibleDC(NULL);
+    if (!hdc) { WriteResult(tag, 0, L"DC_FAIL"); return; }
+
+    HFONT hf = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                           DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"宋体");
+    HGDIOBJ hOld = SelectObject(hdc, hf);
+
+    const wchar_t* wsW = L"ExtTextOutW「あ」";
+    BOOL b1 = ExtTextOutW(hdc, 10, 10, 0, NULL, wsW, (UINT)wcslen(wsW), NULL);
+
+    const wchar_t* wsT = L"あああ";
+    BOOL b2 = TextOutW(hdc, 10, 30, wsT, (int)wcslen(wsT));
+
+    const char* sA = "ExtTextOutA";
+    BOOL b3 = ExtTextOutA(hdc, 10, 50, 0, NULL, sA, (UINT)strlen(sA), NULL);
+
+    SelectObject(hdc, hOld);
+    DeleteObject(hf);
+    DeleteDC(hdc);
+
+    WriteResult(tag, (BYTE)(b1 && b2 && b3), L"TEXTOUT_OK");
+}
+
+
 int main()
 {
     // give the injected DLL's worker thread time to install the hooks
@@ -216,6 +250,7 @@ int main()
     TestGdiplus(L"Arial", "Gdiplus");
     TestGdiplus(L"MS Gothic", "Gdiplus-Map");
     TestSetWindowTextW("WindowTitle");
+    TestTextOut("TextOut");
 
     return 0;
 }

@@ -46,6 +46,9 @@
        NewWindowTitle  = 新标题
      说明：会同时 Hook CreateWindowExA/W 与 SetWindowTextA/W，
      游戏创建窗口时和运行时改标题都会被替换（宽字符安全）。
+     HookTextOut = false （字符级替换开关，配合下方 [CharMap] 段使用，
+                默认关闭；开启后对 ExtTextOut / TextOut 绘制的文本逐字符替换，
+                用于引擎锁定字体、个别字符显示为豆腐块时的兜底）
 
    [FontMap] 段（可选，按"原字体名 → 新字体名"替换）
      键 = 游戏请求的字体名，值 = 替换成的字体（值也可写候选列表）
@@ -59,6 +62,20 @@
        MS* = 黑体              ; 通配：所有 MS 开头的字体都换黑体
        *Gothic* = 黑体         ; 通配：包含 Gothic 的字体都换黑体
      想"只替换命中的字体、其余保持原样"：把 FontName 留空即可。
+
+   [CharMap] 段（可选，需配合 HookTextOut = true）
+     格式：源字符 = 目标字符（左右都必须是单个字符）
+     作用：通过 ExtTextOut / TextOut 绘制的文本，绘制前把"源字符"逐个换成"目标字符"。
+     典型用途：
+       - 日文标点「」『』 → 中文标点“”‘’（引擎锁定字体下让引号正常显示）
+       - 假名 → 字形近似的汉字（字形替换法汉化的兜底）
+     例：
+       [CharMap]
+       「 = “
+       」 = ”
+       あ = 阿
+     注意：TextOut 内部会转调 ExtTextOut，只需 Hook ExtTextOut，无需重复 Hook；
+     ExtTextOutA（ANSI 版）只对值在 0x00-0xFF 内的条目生效，按字节替换。
 
 3. 双击 HookFont.exe 启动游戏。
 

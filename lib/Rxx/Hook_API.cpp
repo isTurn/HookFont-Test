@@ -610,5 +610,128 @@ namespace Rut
 			return nInstalled;
 		}
 		//=====================================================================
+
+
+		//=====================================================================
+		// Character-level text replacement (ExtTextOut / TextOut)
+		//=====================================================================
+		static std::unordered_map<wchar_t, wchar_t> sg_mpCharMapW; // wchar -> wchar (ExtTextOutW)
+		static std::unordered_map<char, char>       sg_mpCharMapA; // byte  -> byte (ExtTextOutA, values <= 0xFF)
+		static bool                                 sg_bCharMapEnabled = false;
+		static LogCallback                          sg_pfnLog = NULL;
+
+		void SetLogCallback(LogCallback pfn)
+		{
+			sg_pfnLog = pfn;
+		}
+
+		void ConfigureCharMap(const CharMapT& mpChars)
+		{
+			sg_mpCharMapW.clear();
+			sg_mpCharMapA.clear();
+
+			for (const auto& kv : mpChars)
+			{
+				if (kv.first == kv.second) continue;
+				sg_mpCharMapW[kv.first] = kv.second;
+				if (kv.first <= 0xFF && kv.second <= 0xFF)
+					sg_mpCharMapA[(char)kv.first] = (char)kv.second;
+			}
+
+			sg_bCharMapEnabled = !sg_mpCharMapW.empty();
+		}
+
+		// Map chars of a wide string in place. ExtTextOut strings are NOT guaranteed
+		// null-terminated, so we always work with the explicit length.
+		static thread_local std::wstring tls_wsTextW;
+
+		static const wchar_t* MapCharsW(const wchar_t* wsIn, size_t nLen)
+		{
+			if (!sg_bCharMapEnabled || !wsIn || nLen == 0) return wsIn;
+
+			// fast path: no mapped char at all -> hand back the original pointer
+			size_t i = 0;
+			for (; i < nLen; ++i)
+				if (sg_mpCharMapW.count(wsIn[i])) break;
+			if (i == nLen) return wsIn;
+
+			tls_wsTextW.assign(wsIn, nLen);
+			for (; i < nLen; ++i)
+			{
+				auto ite = sg_mpCharMapW.find(tls_wsTextW[i]);
+				if (ite != sg_mpCharMapW.end()) tls_wsTextW[i] = ite->second;
+			}
+			return tls_wsTextW.c_str();
+		}
+
+		static thread_local std::string tls_sTextA;
+
+		static const char* MapCharsA(const char* cpIn, size_t nLen)
+		{
+			if (!sg_bCharMapEnabled || !cpIn || nLen == 0) return cpIn;
+
+			size_t i = 0;
+			for (; i < nLen; ++i)
+				if (sg_mpCharMapA.count(cpIn[i])) break;
+			if (i == nLen) return cpIn;
+
+			tls_sTextA.assign(cpIn, nLen);
+			for (; i < nLen; ++i)
+			{
+				auto ite = sg_mpCharMapA.find(tls_sTextA[i]);
+				if (ite != sg_mpCharMapA.end()) tls_sTextA[i] = ite->second;
+			}
+			return tls_sTextA.c_str();
+		}
+
+
+		//*********Start Hook ExtTextOutW*******
+		static pExtTextOutW rawExtTextOutW = ExtTextOutW;
+
+		BOOL WINAPI newExtTextOutW(HDC hdc, INT x, INT y, UINT options, CONST RECT* lprect, LPCWSTR lpString, UINT c, CONST INT* lpDx)
+		{
+			const wchar_t* wsMapped = MapCharsW(lpString, c);
+			if (wsMapped != lpString && sg_pfnLog)
+				sg_pfnLog(L"[CharMap] ExtTextOutW: \"%ls\" -> \"%ls\"", lpString, wsMapped);
+			return rawExtTextOutW(hdc, x, y, options, lprect, wsMapped, c, lpDx);
+		}
+
+		bool HookExtTextOutW()
+		{
+			return DetourAttachFunc(&rawExtTextOutW, newExtTextOutW);
+		}
+		//*********END Hook ExtTextOutW*********
+
+
+		//*********Start Hook ExtTextOutA*******
+		static pExtTextOutA rawExtTextOutA = ExtTextOutA;
+
+		BOOL WINAPI newExtTextOutA(HDC hdc, INT x, INT y, UINT options, CONST RECT* lprect, LPCSTR lpString, UINT c, CONST INT* lpDx)
+		{
+			const char* sMapped = MapCharsA(lpString, c);
+			if (sMapped != lpString && sg_pfnLog)
+				sg_pfnLog(L"[CharMap] ExtTextOutA: \"%hs\" -> \"%hs\"", lpString, sMapped);
+			return rawExtTextOutA(hdc, x, y, options, lprect, sMapped, c, lpDx);
+		}
+
+		bool HookExtTextOutA()
+		{
+			return DetourAttachFunc(&rawExtTextOutA, newExtTextOutA);
+		}
+		//*********END Hook ExtTextOutA*********
+
+
+		// TextOutW/A are deliberately NOT hooked: on Windows both route through
+		// ExtTextOutW/A internally, so hooking only the latter avoids double-mapping
+		// a string that was already replaced (and keeps the surface small).
+		bool HookTextOut()
+		{
+			bool ok = HookExtTextOutW();
+			ok = HookExtTextOutA() && ok;
+			if (!ok && sg_pfnLog)
+				sg_pfnLog(L"[CharMap] ExtTextOut hook failed");
+			return ok;
+		}
+		//=====================================================================
 	}
 }
