@@ -90,14 +90,25 @@ static void StartHook()
 
 		KeysMap& keys = ini[L"HookFont"];
 
-		uint32_t     uiCharSet   = ReadIniKey(keys, L"Charset", (uint32_t)0x86);
-		std::wstring wsFontName  = ReadIniKey(keys, L"FontName", std::wstring(L"黑体"));
-		std::string  sFontNameA  = WStrToStr(wsFontName, CP_ACP); // ANSI(GBK) face name for the A APIs
+		uint32_t     uiCharSet  = ReadIniKey(keys, L"Charset", (uint32_t)0x86);
+		std::wstring wsFontName = ReadIniKey(keys, L"FontName", std::wstring(L"黑体"));
 
-		if (ReadIniKey(keys, L"HookCreateFontA", true))           HookCreateFontA(uiCharSet, sFontNameA.c_str());
-		if (ReadIniKey(keys, L"HookCreateFontIndirectA", true))  HookCreateFontIndirectA(uiCharSet, sFontNameA.c_str());
-		if (ReadIniKey(keys, L"HookCreateFontW", true))          HookCreateFontW(uiCharSet, wsFontName.c_str());
-		if (ReadIniKey(keys, L"HookCreateFontIndirectW", true))  HookCreateFontIndirectW(uiCharSet, wsFontName.c_str());
+		// [FontMap] section: requested face -> replacement (value may be a candidate list).
+		FontMapT mpFontMap;
+		if (ini.Has(L"FontMap"))
+		{
+			KeysMap& fontMapKeys = ini[L"FontMap"];
+			for (auto& kv : fontMapKeys)
+				mpFontMap[kv.first] = static_cast<std::wstring>(kv.second);
+		}
+
+		ConfigureFontReplace(uiCharSet, wsFontName, mpFontMap);
+
+		if (ReadIniKey(keys, L"HookCreateFontA", true))          HookCreateFontA();
+		if (ReadIniKey(keys, L"HookCreateFontIndirectA", true))  HookCreateFontIndirectA();
+		if (ReadIniKey(keys, L"HookCreateFontW", true))          HookCreateFontW();
+		if (ReadIniKey(keys, L"HookCreateFontIndirectW", true))  HookCreateFontIndirectW();
+		if (ReadIniKey(keys, L"HookDirectWrite", true))          HookDirectWrite();
 
 		// Optional: replace the game window title (common in translation patches).
 		if (ReadIniKey(keys, L"HookWindowTitle", false))
@@ -110,7 +121,7 @@ static void StartHook()
 			}
 		}
 
-		LogPrint(L"HookFont initialized. Charset=0x%02X Font=%ls", uiCharSet, wsFontName.c_str());
+		LogPrint(L"HookFont initialized. Charset=0x%02X Font=%ls MapEntries=%d", uiCharSet, wsFontName.c_str(), (int)mpFontMap.size());
 	}
 	catch (const std::exception& err)
 	{

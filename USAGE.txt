@@ -22,12 +22,24 @@
    [HookFont] 段
      Charset  = 0x86   （0x86=GB2312 简体中文，0x81=日文，1=系统默认）
      FontName = 黑体    （替换成的字体名，需系统已安装）
+                支持候选列表：用逗号分隔，自动选用第一个系统已安装的字体
+                （例：FontName = 黑体, 微软雅黑, 宋体）
      HookCreateFontA / HookCreateFontIndirectA / HookCreateFontW / HookCreateFontIndirectW
-              = true / false （是否 Hook 对应的字体创建 API，一般全开）
+              = true / false （是否 Hook 对应的 GDI 字体创建 API，一般全开）
+     HookDirectWrite = true  （是否 Hook DirectWrite 引擎；WPF/Unity 等现代
+                引擎游戏走 DirectWrite，开启后也能被替换，默认开启）
      可选窗口标题替换：
        HookWindowTitle = false
        RawWindowTitle  = 原标题
        NewWindowTitle  = 新标题
+
+   [FontMap] 段（可选，按"原字体名 → 新字体名"精确替换）
+     键 = 游戏请求的字体名，值 = 替换成的字体（值也可写候选列表）
+     命中这里的字体优先于上面 FontName 的全局替换；未命中的字体仍走全局替换。
+     典型用途：只把日文字体（MS Gothic / 游明朝 等）换成中文字体，避免误伤系统界面。
+     例：
+       [FontMap]
+       MS Gothic = 黑体
 
 3. 双击 HookFont.exe 启动游戏。
 
@@ -39,5 +51,8 @@
 
 三、常见问题
 - 字体没变：检查 [HookFont] 段是否存在、FontName 是否正确安装。
+- 个别字体想换、但不想全局替换：在 [FontMap] 里加"原字体名 = 新字体名"，
+  并把 FontName 留空即可（这样只有命中的字体被替换）。
 - 某游戏崩溃：可尝试把 HookCreateFontW / HookCreateFontIndirectW 改为 false 试试。
-- 旧版只有 A 版 Hook：新版默认同时 Hook A 与 W 版，覆盖更全。
+- 游戏用的是 WPF/Unity 等现代引擎还是没替换：确认 HookDirectWrite = true。
+- 旧版只有 A 版 Hook：新版默认同时 Hook A 与 W 版，并支持 DirectWrite，覆盖更全。

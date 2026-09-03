@@ -22,7 +22,10 @@
 
 ## ✨ 特性
 
-- **强制字体替换**：Hook `CreateFontA/W`、`CreateFontIndirectA/W` 四个字体创建 API，统一替换为配置的字符集（默认 `0x86` GB2312）+ 字体（默认黑体）
+- **强制字体替换**：Hook `CreateFontA/W`、`CreateFontIndirectA/W` 四个 GDI 字体创建 API，统一替换为配置的字符集（默认 `0x86` GB2312）+ 字体
+- **DirectWrite 支持**：额外 Hook `IDWriteFactory::CreateTextFormat`，覆盖 WPF / Unity 等现代渲染引擎的游戏
+- **字体映射表**：`[FontMap]` 段支持"原字体名 → 新字体名"精确替换，优先于全局替换
+- **候选字体回退**：`FontName` 支持逗号分隔的候选列表，自动选用第一个系统已安装的字体
 - **Detours 注入**：基于 Microsoft Detours 挂起创建目标进程并注入 DLL，稳定可靠
 - **窗口标题替换**：可选将游戏窗口标题替换为任意文本
 - **免配置环境**：配置按程序自身目录解析，不依赖当前工作目录；中文路径自动转 8.3 短路径
@@ -58,8 +61,11 @@ flowchart LR
     C --> D[HookFont.dll 加载]
     D --> E[工作线程延迟执行 Hook]
     E --> F[Hook CreateFontA/W<br/>CreateFontIndirectA/W]
-    F --> G[强制替换字符集 + 字体<br/>日文游戏正确显示中文]
-    E --> H[可选：替换窗口标题]
+    E --> G[Hook IDWriteFactory<br/>CreateTextFormat]
+    F --> H[按 FontMap 映射 / 候选字体<br/>强制替换字符集 + 字体]
+    G --> H
+    H --> I[日文游戏正确显示中文]
+    E --> J[可选：替换窗口标题]
 ```
 
 ## 🚀 使用（部署给玩家）
@@ -83,12 +89,16 @@ TargetDLLName_1 = kDays.dll
 
 [HookFont]
 Charset = 0x86
-FontName = 黑体
+FontName = 黑体, 微软雅黑, 宋体
 HookCreateFontA = true
 HookCreateFontIndirectA = true
 HookCreateFontW = true
 HookCreateFontIndirectW = true
+HookDirectWrite = true
 HookWindowTitle = false
+
+[FontMap]
+MS Gothic = 黑体
 ```
 
 > 详细部署与排查说明见 [USAGE.txt](USAGE.txt)。
@@ -134,6 +144,9 @@ x86 专属的手动内联 Hook 助手（`WriteHookCode` / `SetHook` 等，基于
 - 配置 / 目标路径改为基于程序自身目录解析，不再受“当前工作目录”影响
 - Hook 从 `DllMain` 内直接执行改为**工作线程延迟执行**，避免加载器锁死锁风险，并调用 `DisableThreadLibraryCalls`
 - 新增 `CreateFontW` / `CreateFontIndirectW` 两个 Unicode 版 Hook；接通原本已实现但未接线的窗口标题替换 `HookTitleExA`
+- 新增 **DirectWrite 引擎支持**（`IDWriteFactory::CreateTextFormat` vtable Hook，无 dwrite.lib 依赖），覆盖 WPF/Unity 等现代引擎游戏
+- 新增 **`[FontMap]` 字体映射表**：按"原字体名 → 新字体名"精确替换，优先于全局替换
+- 新增 **候选字体回退**：`FontName` 支持逗号分隔列表，自动选用第一个已安装字体
 - 注入 DLL 内的失败提示由弹窗改为**日志文件**，避免弹窗卡死游戏
 - 启动器自动把游戏目录设为目标进程工作目录；中文路径自动转短路径注入
 - 编译告警清零（`/W3` 下无 warning），x64 类型安全
