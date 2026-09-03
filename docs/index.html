@@ -223,7 +223,7 @@
       <img alt="Release" src="https://img.shields.io/github/v/release/isTurn/HookFont-Test?style=flat-square&logo=github&color=c0392b">
       <img alt="Build" src="https://img.shields.io/github/actions/workflow/status/isTurn/HookFont-Test/build.yml?style=flat-square&logo=githubactions&logoColor=white&label=build">
       <img alt="License" src="https://img.shields.io/github/license/isTurn/HookFont-Test?style=flat-square&color=3ddc84">
-      <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20x86-0078D6?style=flat-square&logo=windows">
+      <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20x86%20%7C%20x64-0078D6?style=flat-square&logo=windows">
       <img alt="C++" src="https://img.shields.io/badge/Lang-C%2B%2B%20%2F%20Detours-00599C?style=flat-square&logo=cplusplus">
     </div>
     <h1>Hook<span class="grad">Font</span> 字体替换引擎</h1>
@@ -249,6 +249,9 @@
       <div class="feat"><div class="f-ico">🗺️</div><h3>字体映射表</h3><p><code>[FontMap]</code> 段支持"原字体名 → 新字体名"精确替换，优先于全局替换，避免误伤系统界面字体。</p></div>
       <div class="feat"><div class="f-ico">⛓️</div><h3>候选字体回退</h3><p><code>FontName</code> 支持逗号分隔候选列表（含全角逗号），自动选用第一个系统已安装的字体。</p></div>
       <div class="feat"><div class="f-ico">🚀</div><h3>Detours 注入</h3><p>基于 Microsoft Detours 挂起创建目标进程并注入 DLL，稳定可靠；DLL 自身目录解析 INI，不依赖工作目录。</p></div>
+      <div class="feat"><div class="f-ico">💉</div><h3>注入已运行进程</h3><p><code>HookFont.exe -pid &lt;PID&gt;</code> 直接向已运行进程注入——Steam / 官方启动器拉起游戏、或需进主菜单后再挂补丁的场景。</p></div>
+      <div class="feat"><div class="f-ico">⌨️</div><h3>命令行启动</h3><p><code>HookFont.exe &lt;game.exe&gt; [参数...]</code> 直接指定游戏并透传启动参数，无需改 ini。</p></div>
+      <div class="feat"><div class="f-ico">🧩</div><h3>x86 / x64 双平台</h3><p>32 位与 64 位游戏均可使用，仓库附带 Detours x86 + x64 双平台静态库。</p></div>
       <div class="feat"><div class="f-ico">🪟</div><h3>窗口标题替换</h3><p>可选将游戏窗口标题替换为任意文本（翻译补丁常用），<code>HookTitleExA</code> 已接通。</p></div>
       <div class="feat"><div class="f-ico">📁</div><h3>中文路径兼容</h3><p>EXE / DLL 路径自动转 8.3 短路径，中文目录 / 文件名完全兼容。</p></div>
       <div class="feat"><div class="f-ico">⏳</div><h3>延迟 Hook</h3><p>从工作线程延迟执行 Hook，规避加载器锁死锁风险，<code>DisableThreadLibraryCalls</code> 已启用。</p></div>
@@ -395,6 +398,11 @@
             <td>逗号分隔，自动回退到首个已安装字体</td>
           </tr>
           <tr>
+            <td><code>-pid</code> 注入已运行进程</td>
+            <td class="opt">○ 可选</td>
+            <td>Steam / 启动器拉起游戏后再挂补丁（位数需匹配）</td>
+          </tr>
+          <tr>
             <td><code>HookTitleExA</code> 窗口标题</td>
             <td class="opt">○ 可选</td>
             <td>翻译补丁常用的窗口标题替换</td>
@@ -417,10 +425,11 @@
       <h2>从源码构建</h2>
       <p>需要 <b>Visual Studio 2022</b>（C++ 桌面开发）；仓库内置 GitHub Actions 自动构建。</p>
     </div>
-    <pre><span class="c"># 构建 Release x86（当前 HookFont.dll 为 32 位，仅支持 32 位游戏）</span>
+    <pre><span class="c"># 构建 Release x86 / x64（32 位游戏用 x86，64 位游戏用 x64）</span>
 <span class="k">MSBuild.exe</span> HookFont.sln /t:Rebuild /p:Configuration=Release /p:Platform=x86
+<span class="k">MSBuild.exe</span> HookFont.sln /t:Rebuild /p:Configuration=Release /p:Platform=x64
 
-<span class="c"># 或推送到 main，由 CI 自动构建并产出 Artifact</span>
+<span class="c"># 或推送到 main，由 CI 自动构建双版本并产出 Artifact</span>
 git push origin main</pre>
   </div>
 </section>
@@ -432,7 +441,7 @@ git push origin main</pre>
       <h2>注意事项</h2>
     </div>
     <div class="notice">
-      <div class="note"><b>仅 32 位</b> — 当前 Release 为 x86 版，仅支持 32 位游戏；64 位游戏暂不支持（x64 支持规划中）。</div>
+      <div class="note"><b>位数需匹配</b> — 32 位游戏用 x86 版，64 位游戏用 x64 版；<code>-pid</code> 注入时目标进程位数也必须与启动器一致。</div>
       <div class="note"><b>字体需已安装</b> — <code>FontName</code> / 映射目标必须是系统已安装字体，否则自动回退到下一个候选。</div>
       <div class="note"><b>杀软可能告警</b> — Detours 注入 DLL 是常见手法，部分杀毒软件会提示，需放行。</div>
       <div class="note"><b>个别游戏可调参</b> — 若 W 版 Hook 导致崩溃，可单独关闭 <code>HookCreateFontW</code> 试。</div>

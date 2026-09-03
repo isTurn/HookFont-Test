@@ -2,10 +2,11 @@
 =================================
 
 一、部署
-1. 把以下 3 个文件复制到游戏目录：
+1. 按游戏位数选择版本，把以下 3 个文件复制到游戏目录：
       HookFont.dll
       HookFont.exe
       HookFont.ini
+   （x86 版用于 32 位游戏，x64 版用于 64 位游戏；Release 压缩包内分 x86/ 与 x64/ 两个目录）
    （不要改名；若改名，则 .ini 必须与 .dll/.exe 同名，且保持 UTF-8 编码）
 
 2. 用记事本打开 HookFont.ini 配置：
@@ -42,6 +43,16 @@
        MS Gothic = 黑体
 
 3. 双击 HookFont.exe 启动游戏。
+
+   高级用法（命令行）：
+   1) 直接指定游戏启动（跳过改 ini 的 TargetEXE）：
+        HookFont.exe <游戏exe路径>
+      后续参数会透传给游戏，例如：
+        HookFont.exe game.exe --window -fullscreen
+   2) 注入到已运行的进程（游戏已用别的方式启动，如 Steam / 官方启动器）：
+        HookFont.exe -pid <进程ID>
+      进程必须是 32 位（x86 版）或 64 位（x64 版），与所用 HookFont.exe 位数一致。
+      常见用途：游戏启动器再拉起游戏本体、或需要先进入主菜单后再挂补丁。
 
 二、故障排查
 - 运行后同目录会生成日志：HookFont.log（字体 Hook 是否初始化成功）、

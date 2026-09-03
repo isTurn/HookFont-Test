@@ -27,6 +27,9 @@
 - **字体映射表**：`[FontMap]` 段支持"原字体名 → 新字体名"精确替换，优先于全局替换
 - **候选字体回退**：`FontName` 支持逗号分隔的候选列表，自动选用第一个系统已安装的字体
 - **Detours 注入**：基于 Microsoft Detours 挂起创建目标进程并注入 DLL，稳定可靠
+- **注入已运行进程**：`HookFont.exe -pid <PID>` 直接向已运行的进程注入（Steam / 官方启动器拉起游戏、需进主菜单后再挂补丁等场景）
+- **命令行启动**：`HookFont.exe <game.exe> [参数...]` 直接指定要启动的游戏并透传启动参数，无需改 ini
+- **x86 / x64 双平台**：32 位与 64 位游戏均可使用，仓库附带 Detours x86 + x64 静态库
 - **窗口标题替换**：可选将游戏窗口标题替换为任意文本
 - **免配置环境**：配置按程序自身目录解析，不依赖当前工作目录；中文路径自动转 8.3 短路径
 - **延迟 Hook**：从工作线程延迟执行 Hook，规避加载器锁死锁风险
@@ -49,7 +52,7 @@ HookFont.sln
 │       └── Console*        控制台工具
 ├── assets                  README 封面等静态资源
 └── third
-    └── detours             Microsoft Detours（x86 版头文件 + 库）
+    └── detours             Microsoft Detours（x86 + x64 头文件与库）
 ```
 
 ## 🔄 工作原理
@@ -103,6 +106,13 @@ MS Gothic = 黑体
 
 > 详细部署与排查说明见 [USAGE.txt](USAGE.txt)。
 
+**命令行用法**（可选，默认双击启动器即可）：
+
+```
+HookFont.exe <游戏exe路径> [游戏参数...]   # 直接启动指定游戏并透传参数
+HookFont.exe -pid <进程ID>                # 注入到已运行的进程（位数需匹配）
+```
+
 **约定与注意**
 
 - 所有 INI 文件**编码必须是 UTF-8**；`xxx.ini` 必须与 `xxx.dll` / `xxx.exe` 同名
@@ -113,7 +123,7 @@ MS Gothic = 黑体
 
 ## 🔧 构建
 
-环境：**Visual Studio 2022**（v143 工具集，MSVC）。用 VS 打开 `HookFont.sln`，选 **Release | x86** 生成即可，产出在 `Release\`：
+环境：**Visual Studio 2022**（v143 工具集，MSVC）。用 VS 打开 `HookFont.sln`，选 **Release | x86** 或 **Release | x64** 生成即可。产出分别在 `Release\`（x86）与 `x64\Release\`（x64）：
 
 - `HookFont.dll`
 - `RiaLoader.exe`（部署时改名为 `HookFont.exe`）
@@ -123,19 +133,14 @@ MS Gothic = 黑体
 
 ```
 MSBuild.exe HookFont.sln /t:Rebuild /p:Configuration=Release /p:Platform=x86
+MSBuild.exe HookFont.sln /t:Rebuild /p:Configuration=Release /p:Platform=x64
 ```
 
-仓库已配置 [GitHub Actions 自动构建](.github/workflows/build.yml)（`windows-latest` + MSBuild），每次 push 到 `main` 会自动编译并在 Artifacts 中产出上述文件。
+仓库已配置 [GitHub Actions 自动构建](.github/workflows/build.yml)（`windows-latest` + MSBuild），每次 push 到 `main` 会自动编译 **x86 / x64 双版本**并在 Artifacts 中产出。
 
-### x64 说明
+### x86 / x64 说明
 
-代码已按 64 位安全类型（`HMODULE` / `uintptr_t`）改造，`RiaLoader` / `HookFont.dll` 使用 Detours 的部分可移植到 x64。但仓库内只附带了 **x86 版 detours 库**，要生成 x64 需要自行获取 Microsoft Detours 的 x64 静态库，放到：
-
-```
-third\detours\lib.X64\detours.lib
-```
-
-x86 专属的手动内联 Hook 助手（`WriteHookCode` / `SetHook` 等，基于 E9 rel32）在 x64 下会返回失败（保留接口但不生效），实际路径已全部走 Detours。
+仓库附带 Microsoft Detours **x86 与 x64 双平台静态库**（`third\detours\lib.X86` / `lib.X64`），两种位数开箱即用。按游戏位数选择对应版本：32 位游戏用 x86，64 位游戏用 x64。
 
 ## 📦 与旧版（改进前）的差异
 
@@ -147,6 +152,8 @@ x86 专属的手动内联 Hook 助手（`WriteHookCode` / `SetHook` 等，基于
 - 新增 **DirectWrite 引擎支持**（`IDWriteFactory::CreateTextFormat` vtable Hook，无 dwrite.lib 依赖），覆盖 WPF/Unity 等现代引擎游戏
 - 新增 **`[FontMap]` 字体映射表**：按"原字体名 → 新字体名"精确替换，优先于全局替换
 - 新增 **候选字体回退**：`FontName` 支持逗号分隔列表，自动选用第一个已安装字体
+- 新增 **注入已运行进程**（`-pid`）与**命令行启动 / 参数透传**
+- 新增 **x64 支持**：附带 Detours x64 静态库，`Release | x64` 开箱即用
 - 注入 DLL 内的失败提示由弹窗改为**日志文件**，避免弹窗卡死游戏
 - 启动器自动把游戏目录设为目标进程工作目录；中文路径自动转短路径注入
 - 编译告警清零（`/W3` 下无 warning），x64 类型安全
@@ -157,4 +164,4 @@ x86 专属的手动内联 Hook 助手（`WriteHookCode` / `SetHook` 等，基于
 
 ---
 
-*字体替换依赖 [Microsoft Detours](https://github.com/microsoft/Detours)（MIT），随仓库附带 x86 版。*
+*字体替换依赖 [Microsoft Detours](https://github.com/microsoft/Detours)（MIT），随仓库附带 x86 与 x64 版。*

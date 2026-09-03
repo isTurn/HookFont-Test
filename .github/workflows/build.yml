@@ -30,3 +30,26 @@ jobs:
             Release/RiaLoader.exe
             Release/Rxx.lib
           if-no-files-found: error
+
+  build-x64:
+    name: Build (Release x64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore & Build
+        run: msbuild HookFont.sln /t:Rebuild /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: HookFont-x64
+          path: |
+            x64/Release/HookFont.dll
+            x64/Release/RiaLoader.exe
+            x64/Release/Rxx.lib
+          if-no-files-found: error
