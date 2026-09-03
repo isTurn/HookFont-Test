@@ -10,7 +10,8 @@ namespace Rut
 	{
 		BOOL WriteMemory(LPVOID lpAddress, LPCVOID lpBuffer, SIZE_T nSize);
 		BOOL ReadMemory(LPVOID lpAddress, LPVOID lpBuffer, SIZE_T nSize);
-		DWORD MemSearch(DWORD pFind, SIZE_T szFind, PBYTE pToFind, SIZE_T szToFind, BOOL backward = FALSE);
+		// pFind/return are full pointer-width so the search works in both 32/64-bit.
+		ULONG_PTR MemSearch(ULONG_PTR pFind, SIZE_T szFind, PBYTE pToFind, SIZE_T szToFind, BOOL backward = FALSE);
 	}
 }
 

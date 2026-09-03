@@ -1,4 +1,4 @@
-#include "Str.h"
+﻿#include "Str.h"
 
 #include <codecvt>
 #include <Windows.h>
@@ -21,7 +21,7 @@ namespace Rut
 			return cvtUTF8;
 		}
 
-		std::wstring StrToWStr(const std::string& msString, size_t uCodePage)
+		std::wstring StrToWStr(const std::string& msString, unsigned int uCodePage)
 		{
 			std::wstring wsString;
 			if (StrToWStr(msString, wsString, uCodePage) == 0)
@@ -31,7 +31,7 @@ namespace Rut
 			return wsString;
 		}
 
-		std::string WStrToStr(const std::wstring& wsString, size_t uCodePage)
+		std::string WStrToStr(const std::wstring& wsString, unsigned int uCodePage)
 		{
 			std::string msString;
 			if (WStrToStr(wsString, msString, uCodePage) == 0)
@@ -41,7 +41,7 @@ namespace Rut
 			return msString;
 		}
 
-		size_t StrToWStr(const std::string& msString, std::wstring& wsString, size_t uCodePage)
+		size_t StrToWStr(const std::string& msString, std::wstring& wsString, unsigned int uCodePage)
 		{
 			int charCount = MultiByteToWideChar
 			(
@@ -60,7 +60,7 @@ namespace Rut
 			return charCount;
 		}
 
-		size_t WStrToStr(const std::wstring& wsString, std::string& msString, size_t uCodePage)
+		size_t WStrToStr(const std::wstring& wsString, std::string& msString, unsigned int uCodePage)
 		{
 			int wcharCount = WideCharToMultiByte
 			(
@@ -79,14 +79,14 @@ namespace Rut
 			return wcharCount;
 		}
 
-		std::wstring StrToWStr_CVT(const std::string& msString, size_t uCodePage)
+		std::wstring StrToWStr_CVT(const std::string& msString, unsigned int uCodePage)
 		{
 			std::wstring wsString;
 			StrToWStr_CVT(msString, wsString, uCodePage);
 			return wsString;
 		}
 
-		std::string WStrToStr_CVT(const std::wstring& wsString, size_t uCodePage)
+		std::string WStrToStr_CVT(const std::wstring& wsString, unsigned int uCodePage)
 		{
 			std::string msString;
 			WStrToStr_CVT(wsString, msString, uCodePage);
@@ -94,7 +94,7 @@ namespace Rut
 		}
 
 		//Essentially it is still call MultiByteToWideChar / WideCharToMultiByte
-		void StrToWStr_CVT(const std::string& msString, std::wstring& wsString, size_t uCodePage)
+		void StrToWStr_CVT(const std::string& msString, std::wstring& wsString, unsigned int uCodePage)
 		{
 			std::wstring_convert<std::codecvt_byname<wchar_t, char, mbstate_t>> cvtString
 			(
@@ -103,7 +103,7 @@ namespace Rut
 			wsString = cvtString.from_bytes(msString);
 		}
 
-		void WStrToStr_CVT(const std::wstring& wsString, std::string& msString, size_t uCodePage)
+		void WStrToStr_CVT(const std::wstring& wsString, std::string& msString, unsigned int uCodePage)
 		{
 			std::wstring_convert<std::codecvt_byname<wchar_t, char, mbstate_t>> cvtString
 			(

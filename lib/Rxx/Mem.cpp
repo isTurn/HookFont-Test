@@ -28,9 +28,9 @@ namespace Rut
 			return (protect && read) ? TRUE : FALSE;
 		}
 
-		DWORD MemSearch(DWORD pFind, SIZE_T szFind, PBYTE pToFind, SIZE_T szToFind, BOOL backward)
+		ULONG_PTR MemSearch(ULONG_PTR pFind, SIZE_T szFind, PBYTE pToFind, SIZE_T szToFind, BOOL backward)
 		{
-			if ((pFind >= 0x7FFF0000) || (pFind <= 0x00010000) || !szToFind) return NULL;
+			if ((pFind >= (ULONG_PTR)-1 - 0xFFFF) || (pFind <= 0x00010000) || !szToFind) return NULL;
 
 			if (!backward)
 			{

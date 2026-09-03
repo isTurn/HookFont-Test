@@ -1,4 +1,4 @@
-// TestTarget.cpp — 冒烟测试目标：
+﻿// TestTarget.cpp — 冒烟测试目标：
 // 被 HookFont.exe（RiaLoader）启动并注入 HookFont.dll 后，依次调用 GDI
 // CreateFont* 四个 API、DirectWrite（CreateTextFormat + CreateTextLayout +
 // SetFontFamilyName）、GDI+ GdipCreateFontFamilyFromName、SetWindowTextW，

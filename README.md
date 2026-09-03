@@ -11,6 +11,7 @@
 ![Language](https://img.shields.io/badge/Language-C%2B%2B-00599C)
 [![Release](https://img.shields.io/github/v/release/isTurn/HookFont-Test)](https://github.com/isTurn/HookFont-Test/releases)
 [![build](https://github.com/isTurn/HookFont-Test/actions/workflows/build.yml/badge.svg)](https://github.com/isTurn/HookFont-Test/actions/workflows/build.yml)
+[![Pages](https://img.shields.io/badge/GitHub%20Pages-%E5%B1%95%E7%A4%BA%E9%A1%B5-3ddc84)](https://isturn.github.io/HookFont-Test/)
 
 一个用于**日系 Galgame（视觉小说）汉化与字体替换**的 Windows 工具链。
 
