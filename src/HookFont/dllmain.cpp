@@ -117,6 +117,12 @@ static void StartHook()
 
 		ConfigureFontReplace(uiCharSet, wsFontName, vFontMap);
 
+		// Character-set spoofing: keep the engine's requested charset (e.g. SHIFTJIS)
+		// and only swap the face name, so Shift-JIS engines (AGE etc.) keep decoding
+		// their text correctly. Off by default (legacy global-force behavior).
+		bool bCharsetSpoof = ReadIniKey(keys, L"CharsetSpoof", false);
+		SetCharsetSpoof(bCharsetSpoof);
+
 		// Diagnostics: warn loudly when a configured target font is missing, so
 		// "font didn't switch" issues are obvious in the log. Runs after fonts\
 		// auto-install so session-registered fonts count as available.
@@ -156,7 +162,7 @@ static void StartHook()
 			}
 		}
 
-		LogPrint(L"HookFont initialized. Charset=0x%02X Font=%ls FontMap=%d CharMap=%d", uiCharSet, wsFontName.c_str(), (int)vFontMap.size(), (int)mpChars.size());
+		LogPrint(L"HookFont initialized. Charset=0x%02X Font=%ls FontMap=%d CharMap=%d Spoof=%d", uiCharSet, wsFontName.c_str(), (int)vFontMap.size(), (int)mpChars.size(), (int)bCharsetSpoof);
 	}
 	catch (const std::exception& err)
 	{

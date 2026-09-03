@@ -28,6 +28,13 @@ namespace Rut
 		//                    Takes precedence over the global list.
 		void ConfigureFontReplace(uint32_t uiCharSet, const std::wstring& wsFontNameList, const FontMapListT& vFontMap);
 
+		// Character-set spoofing: when enabled, font-face replacement keeps the
+		// engine's original lfCharSet (e.g. SHIFTJIS 0x80) instead of forcing our
+		// configured charset. Engines that derive their text encoding from the
+		// charset they request (AGE/Shift-JIS engines) then keep decoding correctly
+		// while still getting the replaced (CJK-capable) font. Off by default.
+		void SetCharsetSpoof(bool bEnable);
+
 		// Diagnostics: report via the log callback every configured target font
 		// (global FontName candidates + every [FontMap] value) that is NOT present
 		// on the system — so "why didn't it switch?" questions get answered fast.

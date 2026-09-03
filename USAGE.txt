@@ -30,6 +30,12 @@
      FontName = 黑体    （替换成的字体名，需系统已安装，或已通过 fonts\ 自动安装）
                 支持候选列表：用逗号分隔，自动选用第一个系统已安装的字体
                 （例：FontName = 黑体, 微软雅黑, 宋体）
+     CharsetSpoof = false （字符集伪装，默认关闭。开启后只替换字体名、保留引擎
+                请求的字符集，适合 Shift-JIS 引擎（AGE 等日系 galgame 引擎）：
+                这类引擎会按创建字体时的字符集判断文本编码，强制 Charset 会把
+                Shift-JIS 文本按 GBK 解析导致乱码（界面文字变成重复的“赛赛赛/
+                记记记”）。开启时 Charset 配置不生效，FontName 请用中日文兼容
+                字体（微软雅黑 / MS Gothic），保证日文假名与汉字都有字形）
      HookCreateFontA / HookCreateFontIndirectA / HookCreateFontW / HookCreateFontIndirectW
               = true / false （是否 Hook 对应的 GDI 字体创建 API，一般全开）
      HookDirectWrite = true  （是否 Hook DirectWrite 引擎；WPF/Unity 等现代

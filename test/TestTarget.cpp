@@ -92,6 +92,23 @@ static void TestCreateFontIndirectW(const wchar_t* request, const char* tag)
     DeleteObject(hf);
 }
 
+// Charset-spoofing probe: request a SHIFTJIS(0x80) font like a Japanese
+// AGE-style engine does. With CharsetSpoof=false the hook forces the configured
+// charset (0x86); with CharsetSpoof=true it must keep 0x80 while still swapping
+// the face name. Read from TestTarget_result.txt.
+static void TestCharsetSpoof()
+{
+    LOGFONTW lf = { 0 };
+    lf.lfHeight = 16;
+    lf.lfCharSet = SHIFTJIS_CHARSET;            // 0x80, as requested by Shift-JIS engines
+    wcscpy_s(lf.lfFaceName, L"MS Gothic");
+    HFONT hf = CreateFontIndirectW(&lf);
+    LOGFONTW lfOut = { 0 };
+    GetObjectW(hf, sizeof(lfOut), &lfOut);
+    WriteResult("SpoofProbe", (BYTE)lfOut.lfCharSet, lfOut.lfFaceName);
+    DeleteObject(hf);
+}
+
 static void TestDirectWrite(const wchar_t* request, const char* tag)
 {
     IDWriteFactory* factory = nullptr;
@@ -357,6 +374,7 @@ int main()
     TestSetWindowTextW("WindowTitle");
     TestTextOut("TextOut");
     TestGlyphOutline("Glyph");
+    TestCharsetSpoof();
 
     return 0;
 }

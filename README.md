@@ -24,6 +24,7 @@
 ## ✨ 特性
 
 - **强制字体替换**：Hook `CreateFontA/W`、`CreateFontIndirectA/W` 四个 GDI 字体创建 API，统一替换为配置的字符集（默认 `0x86` GB2312）+ 字体
+- **字符集伪装（CharsetSpoof）**：对 Shift-JIS 引擎（AGE 等日系 galgame 引擎）只替换字体名、保留引擎请求的字符集，避免强制 GB2312 破坏引擎的文本解码（症状：界面文字变成重复的"赛赛赛 / 记记记"）。开启后配合中日文兼容字体（微软雅黑 / MS Gothic）即可在不动编码的前提下换字体
 - **DirectWrite 补全**：Hook `IDWriteFactory::CreateTextFormat`、`CreateTextLayout` / `CreateGdiCompatibleTextLayout` 及 `IDWriteTextLayout::SetFontFamilyName`，完整覆盖 WPF / Unity 等现代渲染引擎游戏（运行中改字体也生效）
 - **GDI+ 支持**：Hook `GdipCreateFontFamilyFromName`、`GdipCreateFont`（family+size 一步建字体的缓存 family 场景）与 `GdipCreateFontFromLogfontA/W`，完整覆盖走 GDI+ 创建字体的老游戏 / 引擎
 - **字体缺失检测**：启动时校验全局 `FontName` 与 `[FontMap]` 每个目标字体是否真的已安装，缺失在 `HookFont.log` 标 `[FontCheck]` 告警——"字体没换过来"一眼定位
@@ -103,6 +104,9 @@ TargetDLLName_1 = kDays.dll
 [HookFont]
 Charset = 0x86
 FontName = 黑体, 微软雅黑, 宋体
+; 字符集伪装：对 Shift-JIS 引擎（AGE 等）只换字体名、保留引擎字符集。
+; 开启时 Charset 不生效，请把 FontName 换成中日文兼容字体（微软雅黑 / MS Gothic）。
+CharsetSpoof = false
 HookCreateFontA = true
 HookCreateFontIndirectA = true
 HookCreateFontW = true

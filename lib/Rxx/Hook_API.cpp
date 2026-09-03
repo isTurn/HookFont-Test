@@ -19,6 +19,7 @@ namespace Rut
 		// Shared font-replacement state
 		//=====================================================================
 		static DWORD        sg_dwCharSet = DEFAULT_CHARSET;
+		static bool         sg_bCharsetSpoof = false;   // keep engine charset, only swap face name
 		static std::wstring sg_wsGlobalFontW;      // resolved global replacement (first installed candidate)
 		static FontMapListT   sg_vFontMap;           // ordered per-font map (may contain wildcards)
 
@@ -239,6 +240,11 @@ namespace Rut
 		}
 
 
+		void SetCharsetSpoof(bool bEnable)
+		{
+			sg_bCharsetSpoof = bEnable;
+		}
+
 		//=====================================================================
 		// GDI font-creation hooks
 		//=====================================================================
@@ -249,7 +255,8 @@ namespace Rut
 			const char* sFace = ResolveFontNameA(pszFaceName);
 			if (sFace != pszFaceName)
 			{
-				iCharSet = sg_dwCharSet;
+				if (!sg_bCharsetSpoof)               // charset spoof: keep engine's charset
+					iCharSet = sg_dwCharSet;
 				pszFaceName = sFace;
 			}
 			return rawCreateFontA(cHeight, cWidth, cEscapement, cOrientation, cWeight, bItalic, bUnderline, bStrikeOut, iCharSet, iOutPrecision, iClipPrecision, iQuality, iPitchAndFamily, pszFaceName);
@@ -269,7 +276,8 @@ namespace Rut
 			const wchar_t* wsFace = ResolveFontNameW(pszFaceName);
 			if (wsFace != pszFaceName)
 			{
-				iCharSet = sg_dwCharSet;
+				if (!sg_bCharsetSpoof)               // charset spoof: keep engine's charset
+					iCharSet = sg_dwCharSet;
 				pszFaceName = wsFace;
 			}
 			return rawCreateFontW(cHeight, cWidth, cEscapement, cOrientation, cWeight, bItalic, bUnderline, bStrikeOut, iCharSet, iOutPrecision, iClipPrecision, iQuality, iPitchAndFamily, pszFaceName);
@@ -286,13 +294,15 @@ namespace Rut
 		static pCreateFontIndirectA rawCreateFontIndirectA = CreateFontIndirectA;
 		HFONT WINAPI newCreateFontIndirectA(LOGFONTA* lplf)
 		{
-			const char* sFace = ResolveFontNameA(lplf->lfFaceName);
-			if (sFace != lplf->lfFaceName)
+			LOGFONTA lf2 = *lplf;                     // work on a copy; never mutate engine's LOGFONT
+			const char* sFace = ResolveFontNameA(lf2.lfFaceName);
+			if (sFace != lf2.lfFaceName)
 			{
-				lplf->lfCharSet = (BYTE)sg_dwCharSet;
-				strncpy_s(lplf->lfFaceName, LF_FACESIZE, sFace, _TRUNCATE);
+				if (!sg_bCharsetSpoof)               // charset spoof: keep engine's charset
+					lf2.lfCharSet = (BYTE)sg_dwCharSet;
+				strncpy_s(lf2.lfFaceName, LF_FACESIZE, sFace, _TRUNCATE);
 			}
-			return rawCreateFontIndirectA(lplf);
+			return rawCreateFontIndirectA(&lf2);
 		}
 
 		bool HookCreateFontIndirectA()
@@ -306,13 +316,15 @@ namespace Rut
 		static pCreateFontIndirectW rawCreateFontIndirectW = CreateFontIndirectW;
 		HFONT WINAPI newCreateFontIndirectW(LOGFONTW* lplf)
 		{
-			const wchar_t* wsFace = ResolveFontNameW(lplf->lfFaceName);
-			if (wsFace != lplf->lfFaceName)
+			LOGFONTW lf2 = *lplf;                     // work on a copy; never mutate engine's LOGFONT
+			const wchar_t* wsFace = ResolveFontNameW(lf2.lfFaceName);
+			if (wsFace != lf2.lfFaceName)
 			{
-				lplf->lfCharSet = (BYTE)sg_dwCharSet;
-				wcsncpy_s(lplf->lfFaceName, LF_FACESIZE, wsFace, _TRUNCATE);
+				if (!sg_bCharsetSpoof)               // charset spoof: keep engine's charset
+					lf2.lfCharSet = (BYTE)sg_dwCharSet;
+				wcsncpy_s(lf2.lfFaceName, LF_FACESIZE, wsFace, _TRUNCATE);
 			}
-			return rawCreateFontIndirectW(lplf);
+			return rawCreateFontIndirectW(&lf2);
 		}
 
 		bool HookCreateFontIndirectW()
