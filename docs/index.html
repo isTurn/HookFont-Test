@@ -73,6 +73,9 @@
     <p class="sub">日系 Galgame 字体替换 / 汉化工具链 —— 启动游戏进程并注入 Hook DLL，强制把字体替换为指定字符集与字体，让日文游戏正确显示中文。</p>
     <ul class="features">
       <li><b>强制字体替换</b> — Hook <code>CreateFontA/W</code>、<code>CreateFontIndirectA/W</code> 四个 API，统一替换字符集与字体</li>
+      <li><b>DirectWrite 引擎支持</b> — Hook <code>IDWriteFactory::CreateTextFormat</code>，覆盖 WPF / Unity 等现代渲染引擎游戏</li>
+      <li><b>字体映射表</b> — <code>[FontMap]</code> 按"原字体 → 新字体"精确替换，优先于全局替换</li>
+      <li><b>候选字体回退</b> — <code>FontName</code> 支持逗号分隔候选列表，自动选用首个系统已安装字体</li>
       <li><b>Detours 注入</b> — 以挂起方式启动目标游戏并注入 Hook DLL，稳定可靠</li>
       <li><b>窗口标题替换</b> — 可选将游戏窗口标题替换为任意文本</li>
       <li><b>中文路径兼容</b> — 配置文件按程序自身目录解析，中文路径自动转 8.3 短路径</li>
