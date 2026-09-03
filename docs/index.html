@@ -3,92 +3,455 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#161616">
 <title>HookFont — 日系 Galgame 字体替换 / 汉化工具链</title>
+<meta name="description" content="双击启动器即完成游戏字体替换：Detours 挂起创建游戏进程并注入 Hook DLL，Hook GDI 四个字体创建 API 与 DirectWrite 引擎，强制替换字符集与字体，让日文游戏正确显示中文。支持 [FontMap] 字体映射表与候选字体回退。">
+<meta name="theme-color" content="#14110e">
+<meta property="og:title" content="HookFont — 日系 Galgame 字体替换 / 汉化工具链">
+<meta property="og:description" content="Detours 注入 + Hook GDI/DirectWrite 字体 API，强制替换字符集与字体，让日文游戏正确显示中文。支持字体映射表与候选字体回退。">
+<meta property="og:type" content="website">
 <style>
-  :root { color-scheme: light dark; }
+  :root {
+    --bg: #14110e;
+    --bg-soft: #191512;
+    --card: #211d19;
+    --card-hover: #28231e;
+    --border: #3a332c;
+    --border-soft: #2e2923;
+    --text: #ece7df;
+    --text-dim: #a89f92;
+    --text-faint: #7a7266;
+    --accent: #c0392b;
+    --accent-2: #d3543c;
+    --green: #3ddc84;
+    --amber: #f5b942;
+    --red: #ff6b6b;
+    --radius: 16px;
+    --shadow: 0 20px 60px rgba(0,0,0,.5);
+    --mono: "Cascadia Code","JetBrains Mono",Consolas,"Courier New",monospace;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
-    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
-    background: #161616; color: #e8e6e1;
-    min-height: 100vh; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; padding: 40px 20px;
+    font-family: "Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    background: var(--bg); color: var(--text);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
   }
-  .card {
-    max-width: 780px; width: 100%; text-align: center;
-    background: #1f1f1f; border: 1px solid #333333; border-radius: 16px;
-    padding: 48px 40px; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  ::selection { background: rgba(192,57,43,.35); }
+  a { color: var(--accent-2); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* ===== Nav ===== */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(20,17,14,.85); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-soft);
   }
-  .logo {
-    font-size: 44px; line-height: 1; font-weight: 700;
-    width: 88px; height: 88px; margin: 0 auto 24px;
+  .nav-inner { display: flex; align-items: center; gap: 18px; height: 60px; }
+  .nav-logo {
+    width: 34px; height: 34px; border-radius: 9px; flex: none;
     display: flex; align-items: center; justify-content: center;
-    background: #c0392b; color: #fff; border-radius: 22px;
-    box-shadow: 0 10px 30px rgba(192,57,43,.4);
+    background: linear-gradient(135deg,#d3543c,#a93226); color: #fff; font-weight: 800; font-size: 17px;
   }
-  h1 { font-size: 32px; font-weight: 700; color: #fff; margin-bottom: 12px; }
-  .sub { font-size: 16px; color: #a8a29e; line-height: 1.7; margin-bottom: 28px; }
-  .features {
-    list-style: none; text-align: left; margin: 0 auto 32px; max-width: 580px;
-    display: grid; gap: 10px;
+  .nav-title { font-weight: 700; font-size: 15px; color: #fff; white-space: nowrap; }
+  .nav-links { margin-left: auto; display: flex; gap: 20px; align-items: center; }
+  .nav-links a { color: var(--text-dim); font-size: 14px; }
+  .nav-links a:hover { color: #fff; text-decoration: none; }
+
+  /* ===== Hero ===== */
+  .hero { padding: 84px 0 60px; text-align: center; position: relative; overflow: hidden; }
+  .hero::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(600px 260px at 20% 0%, rgba(192,57,43,.16), transparent 60%),
+      radial-gradient(560px 240px at 82% 10%, rgba(211,84,60,.10), transparent 60%),
+      radial-gradient(700px 320px at 50% 110%, rgba(192,57,43,.08), transparent 60%);
   }
-  .features li {
-    background: #2a2a2a; border-radius: 10px; padding: 12px 16px;
-    font-size: 14px; color: #d6d3cf;
+  .hero .wrap { position: relative; }
+  .hero-badges { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 26px; }
+  .hero-badges img { height: 24px; border-radius: 6px; }
+  .hero h1 { font-size: clamp(34px, 5vw, 54px); font-weight: 800; letter-spacing: -0.5px; line-height: 1.15; }
+  .hero h1 .grad {
+    background: linear-gradient(90deg,#e07a62,#c0392b 50%,#e07a62);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
   }
-  .features b { color: #fff; }
-  .features code {
-    background: #3a3a3a; padding: 1px 6px; border-radius: 5px;
-    font-size: 12.5px; color: #f5f5f5;
-  }
-  .btns { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .hero .sub { max-width: 680px; margin: 18px auto 0; color: var(--text-dim); font-size: 16.5px; }
+  .hero .sub b { color: var(--text); }
+  .hero .cta { margin-top: 34px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
   .btn {
-    display: inline-block; padding: 12px 26px; border-radius: 10px;
-    font-size: 15px; font-weight: 600; text-decoration: none; transition: .2s;
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 13px 28px; border-radius: 12px; font-size: 15px; font-weight: 600;
+    transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
   }
-  .btn-primary { background: #c0392b; color: #fff; }
-  .btn-primary:hover { background: #d3543c; }
-  .btn-ghost { background: transparent; color: #a8a29e; border: 1px solid #444444; }
-  .btn-ghost:hover { color: #e8e6e1; border-color: #666666; }
-  .footer { margin-top: 32px; font-size: 13px; color: #78716c; }
-  .footer a { color: #a8a29e; }
-  @media (prefers-color-scheme: light) {
-    body { background: #f5f3ef; color: #1c1917; }
-    .card { background: #fff; border-color: #e7e5e4; }
-    .features li { background: #f5f3ef; color: #44403c; }
-    .features b { color: #1c1917; }
-    .features code { background: #e7e5e4; color: #292524; }
-    .sub { color: #78716c; }
-    .btn-ghost { color: #78716c; border-color: #d6d3d1; }
-    .btn-ghost:hover { color: #1c1917; border-color: #a8a29e; }
-    .footer { color: #a8a29e; }
-    .footer a { color: #78716c; }
+  .btn:hover { text-decoration: none; transform: translateY(-2px); }
+  .btn-primary {
+    background: linear-gradient(135deg,#d3543c,#a93226); color: #fff;
+    box-shadow: 0 12px 30px rgba(192,57,43,.35);
+  }
+  .btn-primary:hover { background: linear-gradient(135deg,#e05a3f,#c0392b); box-shadow: 0 16px 38px rgba(192,57,43,.45); }
+  .btn-ghost { background: rgba(255,255,255,.04); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: rgba(255,255,255,.08); border-color: #55473c; }
+  .btn .ico { font-size: 17px; }
+  .hero .meta { margin-top: 22px; font-size: 13px; color: var(--text-faint); }
+
+  /* ===== Sections ===== */
+  section { padding: 56px 0; }
+  .sec-head { text-align: center; margin-bottom: 40px; }
+  .sec-head .kicker {
+    display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: 2px;
+    color: var(--accent-2); text-transform: uppercase; margin-bottom: 10px;
+  }
+  .sec-head h2 { font-size: clamp(24px, 3vw, 32px); font-weight: 800; letter-spacing: -0.3px; }
+  .sec-head p { color: var(--text-dim); max-width: 640px; margin: 10px auto 0; font-size: 15px; }
+
+  /* ===== Features ===== */
+  .feat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .feat {
+    background: var(--card); border: 1px solid var(--border-soft); border-radius: var(--radius);
+    padding: 22px 22px; transition: transform .15s ease, border-color .15s ease, background .15s ease;
+  }
+  .feat:hover { transform: translateY(-3px); border-color: #55473c; background: var(--card-hover); }
+  .feat .f-ico {
+    width: 42px; height: 42px; border-radius: 11px; margin-bottom: 14px;
+    display: flex; align-items: center; justify-content: center; font-size: 20px;
+    background: rgba(192,57,43,.14); border: 1px solid rgba(192,57,43,.28);
+  }
+  .feat h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; color: #fff; }
+  .feat p { font-size: 13.5px; color: var(--text-dim); }
+  .feat code { font-family: var(--mono); font-size: 12px; background: rgba(255,255,255,.07); padding: 1px 6px; border-radius: 5px; }
+
+  /* ===== Preview ===== */
+  .shot-frame {
+    border: 1px solid var(--border); border-radius: 18px; overflow: hidden;
+    box-shadow: var(--shadow); background: #000;
+  }
+  .shot-frame img { display: block; width: 100%; height: auto; }
+  .shot-cap { text-align: center; color: var(--text-faint); font-size: 13px; margin-top: 14px; }
+
+  /* ===== How-to ===== */
+  .how-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .how {
+    background: var(--card); border: 1px solid var(--border-soft); border-radius: var(--radius);
+    padding: 24px; display: flex; flex-direction: column;
+  }
+  .how .h-num {
+    width: 30px; height: 30px; border-radius: 9px; flex: none; margin-bottom: 14px;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg,#d3543c,#a93226); color: #fff; font-weight: 800; font-size: 14px;
+  }
+  .how h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; color: #fff; }
+  .how p { font-size: 13.5px; color: var(--text-dim); }
+  .how ol { margin: 10px 0 0 18px; font-size: 13.5px; color: var(--text-dim); }
+  .how ol li { margin-bottom: 5px; }
+  pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.7;
+    background: #0d0b09; border: 1px solid var(--border-soft); border-radius: 12px;
+    padding: 18px 20px; overflow-x: auto; margin-top: 16px;
+  }
+  pre .c { color: #8a7f6f; }
+  pre .k { color: #f0a58f; }
+  pre .s { color: #b5d99a; }
+
+  /* ===== Flow ===== */
+  .flow { display: flex; flex-direction: column; align-items: center; gap: 0; }
+  .fnode {
+    background: var(--card); border: 1px solid var(--border); border-radius: 13px;
+    padding: 14px 26px; min-width: 280px; text-align: center;
+    font-size: 14px; position: relative;
+  }
+  .fnode b { color: #fff; }
+  .fnode .step { color: var(--accent-2); font-family: var(--mono); font-size: 12px; display: block; margin-bottom: 3px; }
+  .fnode .d { color: var(--text-faint); font-size: 12px; display: block; margin-top: 3px; }
+  .farrow { color: var(--accent-2); font-size: 22px; line-height: 1; padding: 8px 0; opacity: .9; }
+  .flow-branch { display: flex; flex-direction: column; align-items: center; }
+  @media (min-width: 820px) {
+    .flow-branch { flex-direction: row; gap: 20px; align-items: flex-start; }
+    .fnode { min-width: 300px; }
+  }
+
+  /* ===== Table ===== */
+  .tbl-wrap { overflow-x: auto; border: 1px solid var(--border-soft); border-radius: var(--radius); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 620px; }
+  th, td { padding: 13px 16px; text-align: left; border-bottom: 1px solid var(--border-soft); }
+  th { background: var(--card); color: var(--text-dim); font-size: 12.5px; letter-spacing: .5px; text-transform: uppercase; }
+  td { background: var(--bg-soft); }
+  tr:last-child td { border-bottom: none; }
+  .yes { color: var(--green); font-weight: 700; }
+  .no { color: var(--red); font-weight: 700; }
+  .opt { color: var(--amber); font-weight: 700; }
+  td code, th code { font-family: var(--mono); font-size: 12.5px; background: rgba(255,255,255,.07); padding: 1px 6px; border-radius: 5px; }
+
+  /* ===== Notice ===== */
+  .notice { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .note { background: rgba(245,185,66,.06); border: 1px solid rgba(245,185,66,.25); border-radius: 13px; padding: 16px 18px; font-size: 13px; color: var(--text-dim); }
+  .note b { color: var(--amber); }
+
+  /* ===== Footer ===== */
+  footer { border-top: 1px solid var(--border-soft); padding: 36px 0 44px; text-align: center; color: var(--text-faint); font-size: 13px; }
+  footer a { color: var(--text-dim); }
+  footer .f-links { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 640px) {
+    .hero { padding: 56px 0 40px; }
+    .nav-links .hide-m { display: none; }
+    .fnode { min-width: 0; width: 100%; }
   }
 </style>
 </head>
 <body>
-  <div class="card">
-    <div class="logo">字</div>
-    <h1>HookFont</h1>
-    <p class="sub">日系 Galgame 字体替换 / 汉化工具链 —— 启动游戏进程并注入 Hook DLL，强制把字体替换为指定字符集与字体，让日文游戏正确显示中文。</p>
-    <ul class="features">
-      <li><b>强制字体替换</b> — Hook <code>CreateFontA/W</code>、<code>CreateFontIndirectA/W</code> 四个 API，统一替换字符集与字体</li>
-      <li><b>DirectWrite 引擎支持</b> — Hook <code>IDWriteFactory::CreateTextFormat</code>，覆盖 WPF / Unity 等现代渲染引擎游戏</li>
-      <li><b>字体映射表</b> — <code>[FontMap]</code> 按"原字体 → 新字体"精确替换，优先于全局替换</li>
-      <li><b>候选字体回退</b> — <code>FontName</code> 支持逗号分隔候选列表，自动选用首个系统已安装字体</li>
-      <li><b>Detours 注入</b> — 以挂起方式启动目标游戏并注入 Hook DLL，稳定可靠</li>
-      <li><b>窗口标题替换</b> — 可选将游戏窗口标题替换为任意文本</li>
-      <li><b>中文路径兼容</b> — 配置文件按程序自身目录解析，中文路径自动转 8.3 短路径</li>
-      <li><b>日志排查</b> — 运行日志落盘（<code>HookFont.log</code>），异常可追查</li>
-    </ul>
-    <div class="btns">
-      <a class="btn btn-primary" href="https://github.com/isTurn/HookFont-Test/releases" target="_blank" rel="noopener">下载</a>
-      <a class="btn btn-ghost" href="https://github.com/isTurn/HookFont-Test" target="_blank" rel="noopener">查看源码</a>
-    </div>
-    <div class="footer">
-      开源 · <a href="https://github.com/isTurn/HookFont-Test/blob/main/README.md" target="_blank" rel="noopener">使用文档</a> ·
-      <a href="https://github.com/isTurn/HookFont-Test/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+
+<nav>
+  <div class="wrap nav-inner">
+    <div class="nav-logo">字</div>
+    <span class="nav-title">HookFont</span>
+    <div class="nav-links">
+      <a href="#features">特性</a>
+      <a href="#preview">预览</a>
+      <a href="#usage">使用</a>
+      <a href="#principle">原理</a>
+      <a href="#compare">覆盖</a>
+      <a class="hide-m" href="https://github.com/isTurn/HookFont-Test" target="_blank" rel="noopener">GitHub</a>
     </div>
   </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="hero-badges">
+      <img alt="Release" src="https://img.shields.io/github/v/release/isTurn/HookFont-Test?style=flat-square&logo=github&color=c0392b">
+      <img alt="Build" src="https://img.shields.io/github/actions/workflow/status/isTurn/HookFont-Test/build.yml?style=flat-square&logo=githubactions&logoColor=white&label=build">
+      <img alt="License" src="https://img.shields.io/github/license/isTurn/HookFont-Test?style=flat-square&color=3ddc84">
+      <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20x86-0078D6?style=flat-square&logo=windows">
+      <img alt="C++" src="https://img.shields.io/badge/Lang-C%2B%2B%20%2F%20Detours-00599C?style=flat-square&logo=cplusplus">
+    </div>
+    <h1>Hook<span class="grad">Font</span> 字体替换引擎</h1>
+    <p class="sub">日系 Galgame 字体替换 / 汉化工具链 —— 双击启动器，Detours <b>挂起创建游戏进程</b>并注入 Hook DLL，Hook GDI 与 <b>DirectWrite</b> 字体创建 API，强制替换字符集与字体，让日文游戏正确显示中文。</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/isTurn/HookFont-Test/releases" target="_blank" rel="noopener"><span class="ico">⬇</span> 下载 Release</a>
+      <a class="btn btn-ghost" href="https://github.com/isTurn/HookFont-Test" target="_blank" rel="noopener"><span class="ico">⌥</span> 查看源码</a>
+    </div>
+    <p class="meta">免安装 · 记事本改 ini 即用 · 配置自动跟随程序目录 · MIT License</p>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="kicker">Features</span>
+      <h2>功能特性</h2>
+      <p>从 GDI 到 DirectWrite 全覆盖，支持按字体精确映射与候选回退。</p>
+    </div>
+    <div class="feat-grid">
+      <div class="feat"><div class="f-ico">🈶</div><h3>强制字体替换</h3><p>Hook <code>CreateFontA/W</code>、<code>CreateFontIndirectA/W</code> 四个 GDI 字体创建 API，统一替换为配置的字符集 + 字体。</p></div>
+      <div class="feat"><div class="f-ico">🎨</div><h3>DirectWrite 引擎</h3><p>Hook <code>IDWriteFactory::CreateTextFormat</code>（vtable 补丁，无 dwrite.lib 依赖），覆盖 WPF / Unity 等现代渲染引擎游戏。</p></div>
+      <div class="feat"><div class="f-ico">🗺️</div><h3>字体映射表</h3><p><code>[FontMap]</code> 段支持"原字体名 → 新字体名"精确替换，优先于全局替换，避免误伤系统界面字体。</p></div>
+      <div class="feat"><div class="f-ico">⛓️</div><h3>候选字体回退</h3><p><code>FontName</code> 支持逗号分隔候选列表（含全角逗号），自动选用第一个系统已安装的字体。</p></div>
+      <div class="feat"><div class="f-ico">🚀</div><h3>Detours 注入</h3><p>基于 Microsoft Detours 挂起创建目标进程并注入 DLL，稳定可靠；DLL 自身目录解析 INI，不依赖工作目录。</p></div>
+      <div class="feat"><div class="f-ico">🪟</div><h3>窗口标题替换</h3><p>可选将游戏窗口标题替换为任意文本（翻译补丁常用），<code>HookTitleExA</code> 已接通。</p></div>
+      <div class="feat"><div class="f-ico">📁</div><h3>中文路径兼容</h3><p>EXE / DLL 路径自动转 8.3 短路径，中文目录 / 文件名完全兼容。</p></div>
+      <div class="feat"><div class="f-ico">⏳</div><h3>延迟 Hook</h3><p>从工作线程延迟执行 Hook，规避加载器锁死锁风险，<code>DisableThreadLibraryCalls</code> 已启用。</p></div>
+      <div class="feat"><div class="f-ico">📜</div><h3>日志排查</h3><p>运行日志落盘（<code>HookFont.log</code>），失败原因可追查，不弹窗卡游戏。</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="preview" style="background:var(--bg-soft);border-top:1px solid var(--border-soft);border-bottom:1px solid var(--border-soft);">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="kicker">Preview</span>
+      <h2>项目横幅</h2>
+      <p>墨黑底 + 朱砂「字」印 —— 日系 Galgame 字体替换工具链的视觉标识。</p>
+    </div>
+    <div class="shot-frame">
+      <img src="cover.png" alt="HookFont 项目横幅">
+    </div>
+    <p class="shot-cap">项目横幅 · 墨黑宣纸质感 · 朱砂印章点缀</p>
+  </div>
+</section>
+
+<section id="usage">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="kicker">Usage</span>
+      <h2>快速上手</h2>
+      <p>三步完成：把三个文件放进游戏目录，记事本改一下配置，双击启动器即可。</p>
+    </div>
+    <div class="how-grid">
+      <div class="how">
+        <div class="h-num">1</div>
+        <h3>复制到游戏目录</h3>
+        <p>从 Releases 下载，把 <code>HookFont.dll</code> / <code>HookFont.exe</code> / <code>HookFont.ini</code> 三个文件一起复制到游戏所在目录。</p>
+        <ol>
+          <li>下载 Release 压缩包并解压</li>
+          <li>三个文件保持同一目录、同名</li>
+          <li>INI 文件编码保持 UTF-8</li>
+        </ol>
+      </div>
+      <div class="how">
+        <div class="h-num">2</div>
+        <h3>编辑配置</h3>
+        <p>记事本打开 <code>HookFont.ini</code>，填上游戏主程序名；可按需调整字符集、字体与映射。</p>
+        <ol>
+          <li><code>TargetEXE</code> 填游戏主程序 exe 名</li>
+          <li><code>Charset</code> 默认 <code>0x86</code>（GB2312）</li>
+          <li><code>FontName</code> 可写候选列表，如 <code>黑体, 微软雅黑</code></li>
+          <li>（可选）在 <code>[FontMap]</code> 精确映射个别字体</li>
+        </ol>
+      </div>
+      <div class="how">
+        <div class="h-num">3</div>
+        <h3>双击 HookFont.exe</h3>
+        <p>启动器以挂起方式启动游戏并注入 Hook DLL，字体即被强制替换。</p>
+        <ol>
+          <li>双击 <code>HookFont.exe</code></li>
+          <li>游戏正常启动，字体 / 字符集被替换</li>
+          <li>遇到问题看同目录 <code>HookFont.log</code></li>
+        </ol>
+      </div>
+    </div>
+    <pre><span class="c"># HookFont.ini —— 完整配置示例</span>
+<span class="k">[RiaLoader]</span>
+<span class="k">TargetEXE</span> = <span class="s">ojyousama.exe</span>            <span class="c"># 游戏主程序</span>
+<span class="k">TargetDLLCount</span> = <span class="s">2</span>
+<span class="k">TargetDLLName_0</span> = <span class="s">HookFont.dll</span>
+<span class="k">TargetDLLName_1</span> = <span class="s">kDays.dll</span>
+
+<span class="k">[HookFont]</span>
+<span class="k">Charset</span> = <span class="s">0x86</span>                       <span class="c"># 0x86=GB2312 简体中文</span>
+<span class="k">FontName</span> = <span class="s">黑体, 微软雅黑, 宋体</span>   <span class="c"># 候选列表，自动选首个已安装</span>
+<span class="k">HookCreateFontA</span> = <span class="s">true</span>
+<span class="k">HookCreateFontIndirectA</span> = <span class="s">true</span>
+<span class="k">HookCreateFontW</span> = <span class="s">true</span>
+<span class="k">HookCreateFontIndirectW</span> = <span class="s">true</span>
+<span class="k">HookDirectWrite</span> = <span class="s">true</span>            <span class="c"># WPF/Unity 等现代引擎</span>
+<span class="k">HookWindowTitle</span> = <span class="s">false</span>
+
+<span class="k">[FontMap]</span>                          <span class="c"># 按字体精确替换，优先于全局</span>
+<span class="k">MS Gothic</span> = <span class="s">黑体</span></pre>
+  </div>
+</section>
+
+<section id="principle" style="background:var(--bg-soft);border-top:1px solid var(--border-soft);border-bottom:1px solid var(--border-soft);">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="kicker">How it works</span>
+      <h2>工作原理</h2>
+      <p>启动器解析配置 → Detours 挂起创建进程并注入 DLL → 工作线程延迟执行字体 Hook。</p>
+    </div>
+    <div class="flow">
+      <div class="fnode"><span class="step">1 · 读取配置</span><b>HookFont.exe</b><span class="d">解析同目录 HookFont.ini（自身目录定位，不依赖工作目录）</span></div>
+      <div class="farrow">↓</div>
+      <div class="fnode"><span class="step">2 · 挂起创建</span><b>Detours CreateProcess + CREATE_SUSPENDED</b><span class="d">目标主线程挂起，尚未执行入口</span></div>
+      <div class="farrow">↓</div>
+      <div class="fnode"><span class="step">3 · 注入 DLL</span><b>写入 HookFont.dll</b><span class="d">触发 DllMain，DLL 自身目录读取 INI</span></div>
+      <div class="farrow">↓</div>
+      <div class="fnode"><span class="step">4 · 延迟 Hook</span><b>工作线程 DetourAttach</b><span class="d">规避加载器锁死锁；DisableThreadLibraryCalls</span></div>
+      <div class="farrow">↓</div>
+      <div class="fnode"><span class="step">5 · 强制替换</span><b>GDI 四 API + DirectWrite</b><span class="d">按 [FontMap] 映射 / 候选列表解析目标字体</span></div>
+      <div class="farrow">↓</div>
+      <div class="fnode"><span class="step">6 · 正确显示</span><b>Charset=0x86 + 指定字体</b><span class="d">日文游戏界面正常显示简体中文</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="compare">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="kicker">Coverage</span>
+      <h2>替换目标覆盖矩阵</h2>
+      <p>覆盖传统 GDI 与现代 DirectWrite 两条渲染路径，兼顾按字体精确控制。</p>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>Hook / 能力</th><th>默认</th><th>适用场景</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>CreateFontA</code> · <code>CreateFontW</code></td>
+            <td class="yes">✔ 开启</td>
+            <td>传统 GDI 引擎游戏（绝大多数 Galgame）</td>
+          </tr>
+          <tr>
+            <td><code>CreateFontIndirectA</code> · <code>CreateFontIndirectW</code></td>
+            <td class="yes">✔ 开启</td>
+            <td>通过 LOGFONT 创建字体的 GDI 游戏</td>
+          </tr>
+          <tr>
+            <td><code>IDWriteFactory::CreateTextFormat</code></td>
+            <td class="yes">✔ 开启</td>
+            <td>WPF / Unity 等 DirectWrite 现代引擎</td>
+          </tr>
+          <tr>
+            <td><code>[FontMap]</code> 字体映射表</td>
+            <td class="opt">○ 可选</td>
+            <td>按"原字体 → 新字体"精确替换，优先于全局</td>
+          </tr>
+          <tr>
+            <td><code>FontName</code> 候选列表</td>
+            <td class="opt">○ 可选</td>
+            <td>逗号分隔，自动回退到首个已安装字体</td>
+          </tr>
+          <tr>
+            <td><code>HookTitleExA</code> 窗口标题</td>
+            <td class="opt">○ 可选</td>
+            <td>翻译补丁常用的窗口标题替换</td>
+          </tr>
+          <tr>
+            <td>位图自绘字体（部分引擎）</td>
+            <td class="no">✘</td>
+            <td>由引擎直接绘制位图，不经字体 API，无法替换</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="build" style="background:var(--bg-soft);border-top:1px solid var(--border-soft);border-bottom:1px solid var(--border-soft);">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="kicker">Build</span>
+      <h2>从源码构建</h2>
+      <p>需要 <b>Visual Studio 2022</b>（C++ 桌面开发）；仓库内置 GitHub Actions 自动构建。</p>
+    </div>
+    <pre><span class="c"># 构建 Release x86（当前 HookFont.dll 为 32 位，仅支持 32 位游戏）</span>
+<span class="k">MSBuild.exe</span> HookFont.sln /t:Rebuild /p:Configuration=Release /p:Platform=x86
+
+<span class="c"># 或推送到 main，由 CI 自动构建并产出 Artifact</span>
+git push origin main</pre>
+  </div>
+</section>
+
+<section id="notice">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="kicker">Notice</span>
+      <h2>注意事项</h2>
+    </div>
+    <div class="notice">
+      <div class="note"><b>仅 32 位</b> — 当前 Release 为 x86 版，仅支持 32 位游戏；64 位游戏暂不支持（x64 支持规划中）。</div>
+      <div class="note"><b>字体需已安装</b> — <code>FontName</code> / 映射目标必须是系统已安装字体，否则自动回退到下一个候选。</div>
+      <div class="note"><b>杀软可能告警</b> — Detours 注入 DLL 是常见手法，部分杀毒软件会提示，需放行。</div>
+      <div class="note"><b>个别游戏可调参</b> — 若 W 版 Hook 导致崩溃，可单独关闭 <code>HookCreateFontW</code> 试。</div>
+      <div class="note"><b>请合法使用</b> — 仅用于你有权操作的游戏（汉化补丁、自用调试等场景）。</div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="f-links">
+      <a href="https://github.com/isTurn/HookFont-Test" target="_blank" rel="noopener">GitHub 仓库</a>
+      <a href="https://github.com/isTurn/HookFont-Test/blob/main/README.md" target="_blank" rel="noopener">使用文档</a>
+      <a href="https://github.com/isTurn/HookFont-Test/releases" target="_blank" rel="noopener">Releases</a>
+      <a href="https://github.com/isTurn/HookFont-Test/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+    </div>
+    <div>HookFont · 日系 Galgame 字体替换 / 汉化工具链 · MIT License © 2026 isTurn</div>
+  </div>
+</footer>
+
 </body>
 </html>
