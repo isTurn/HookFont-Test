@@ -229,6 +229,38 @@ static void TestTextOut(const char* tag)
 }
 
 
+// Glyph-level replacement: query the outline of a mapped char via
+// GetGlyphOutlineW/A. The injected DLL maps あ (U+3042) -> 阿 before the outline
+// is fetched; the rewrite is verified from HookFont.log ("[CharMap]
+// GetGlyphOutline*: U+3042 -> U+963F"). Here we only prove the calls succeed
+// (return value != GDI_ERROR) and don't crash. GGO_METRICS avoids any need for a
+// real glyph bitmap.
+static void TestGlyphOutline(const char* tag)
+{
+    HDC hdc = CreateCompatibleDC(NULL);
+    if (!hdc) { WriteResult(tag, 0, L"DC_FAIL"); return; }
+
+    HFONT hf = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                           DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"宋体");
+    HGDIOBJ hOld = SelectObject(hdc, hf);
+
+    MAT2 mat = { {0,1},{0,0},{0,0},{0,1} }; // identity transform
+    GLYPHMETRICS gmW = { 0 };
+    DWORD rw = GetGlyphOutlineW(hdc, 0x3042 /* あ */, 0 /* GGO_METRICS */, &gmW, 0, NULL, &mat);
+
+    GLYPHMETRICS gmA = { 0 };
+    DWORD ra = GetGlyphOutlineA(hdc, 0x3042 /* あ */, 0 /* GGO_METRICS */, &gmA, 0, NULL, &mat);
+
+    SelectObject(hdc, hOld);
+    DeleteObject(hf);
+    DeleteDC(hdc);
+
+    BOOL ok = (rw != GDI_ERROR && ra != GDI_ERROR);
+    WriteResult(tag, (BYTE)ok, L"GLYPH_OK");
+}
+
+
 int main()
 {
     // give the injected DLL's worker thread time to install the hooks
@@ -251,6 +283,7 @@ int main()
     TestGdiplus(L"MS Gothic", "Gdiplus-Map");
     TestSetWindowTextW("WindowTitle");
     TestTextOut("TextOut");
+    TestGlyphOutline("Glyph");
 
     return 0;
 }

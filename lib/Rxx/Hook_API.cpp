@@ -732,6 +732,67 @@ namespace Rut
 				sg_pfnLog(L"[CharMap] ExtTextOut hook failed");
 			return ok;
 		}
+
+
+		//*********Start Hook GetGlyphOutlineA/W*******
+		// Maps the requested character through [CharMap] before the outline is
+		// fetched. uChar is a full Unicode code point even in the A variant, so both
+		// variants consult the wide map. Fallback for engines that grab glyph
+		// bitmaps directly (bypassing font objects / text output).
+		static pGetGlyphOutlineA rawGetGlyphOutlineA = GetGlyphOutlineA;
+
+		DWORD WINAPI newGetGlyphOutlineA(HDC hdc, UINT uChar, UINT fuFormat, LPGLYPHMETRICS lpgm, DWORD cjBuffer, LPVOID pvBuffer, const MAT2* lpmat2)
+		{
+			if (sg_bCharMapEnabled)
+			{
+				auto ite = sg_mpCharMapW.find((wchar_t)uChar);
+				if (ite != sg_mpCharMapW.end() && ite->second != (wchar_t)uChar)
+				{
+					if (sg_pfnLog)
+						sg_pfnLog(L"[CharMap] GetGlyphOutlineA: U+%04X -> U+%04X", uChar, (unsigned)ite->second);
+					uChar = ite->second;
+				}
+			}
+			return rawGetGlyphOutlineA(hdc, uChar, fuFormat, lpgm, cjBuffer, pvBuffer, lpmat2);
+		}
+
+		bool HookGetGlyphOutlineA()
+		{
+			return DetourAttachFunc(&rawGetGlyphOutlineA, newGetGlyphOutlineA);
+		}
+
+
+		static pGetGlyphOutlineW rawGetGlyphOutlineW = GetGlyphOutlineW;
+
+		DWORD WINAPI newGetGlyphOutlineW(HDC hdc, UINT uChar, UINT fuFormat, LPGLYPHMETRICS lpgm, DWORD cjBuffer, LPVOID pvBuffer, const MAT2* lpmat2)
+		{
+			if (sg_bCharMapEnabled)
+			{
+				auto ite = sg_mpCharMapW.find((wchar_t)uChar);
+				if (ite != sg_mpCharMapW.end() && ite->second != (wchar_t)uChar)
+				{
+					if (sg_pfnLog)
+						sg_pfnLog(L"[CharMap] GetGlyphOutlineW: U+%04X -> U+%04X", uChar, (unsigned)ite->second);
+					uChar = ite->second;
+				}
+			}
+			return rawGetGlyphOutlineW(hdc, uChar, fuFormat, lpgm, cjBuffer, pvBuffer, lpmat2);
+		}
+
+		bool HookGetGlyphOutlineW()
+		{
+			return DetourAttachFunc(&rawGetGlyphOutlineW, newGetGlyphOutlineW);
+		}
+
+		bool HookGlyphOutline()
+		{
+			bool ok = HookGetGlyphOutlineA();
+			ok = HookGetGlyphOutlineW() && ok;
+			if (!ok && sg_pfnLog)
+				sg_pfnLog(L"[CharMap] GetGlyphOutline hook failed");
+			return ok;
+		}
+		//*********END Hook GetGlyphOutlineA/W*******
 		//=====================================================================
 	}
 }

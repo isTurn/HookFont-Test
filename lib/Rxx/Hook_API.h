@@ -74,6 +74,13 @@ namespace Rut
 		// Attach the ExtTextOutW/A hooks. Requires ConfigureCharMap() first.
 		bool HookTextOut();
 
+		// Attach the GetGlyphOutlineA/W hooks. Maps the requested character through
+		// the same [CharMap] table before the glyph outline is produced — a fallback
+		// for engines that fetch glyph bitmaps directly instead of going through
+		// font objects / text output (e.g. old DirectX rasterizers). Requires
+		// ConfigureCharMap() first.
+		bool HookGlyphOutline();
+
 		// Optional log sink used by the hooks (dllmain registers its logger here);
 		// hooks call it for diagnostics such as "text replaced". NULL = no logging.
 		typedef void(*LogCallback)(const wchar_t* wsFmt, ...);

@@ -49,6 +49,11 @@
      HookTextOut = false （字符级替换开关，配合下方 [CharMap] 段使用，
                 默认关闭；开启后对 ExtTextOut / TextOut 绘制的文本逐字符替换，
                 用于引擎锁定字体、个别字符显示为豆腐块时的兜底）
+     HookGlyphOutline = false （字形级替换开关，同样走 [CharMap]；
+                少数引擎不渲染文本、直接调 GetGlyphOutline 抓字形位图
+                （老 DirectX 光栅化），字体替换与 ExtTextOut 都覆盖不到，
+                开启后按 [CharMap] 把字符换成目标字形再取轮廓。
+                建议与 HookTextOut 一起开启）
 
    [FontMap] 段（可选，按"原字体名 → 新字体名"替换）
      键 = 游戏请求的字体名，值 = 替换成的字体（值也可写候选列表）
@@ -75,7 +80,9 @@
        」 = ”
        あ = 阿
      注意：TextOut 内部会转调 ExtTextOut，只需 Hook ExtTextOut，无需重复 Hook；
-     ExtTextOutA（ANSI 版）只对值在 0x00-0xFF 内的条目生效，按字节替换。
+     ExtTextOutA（ANSI 版）只对值在 0x00-0xFF 内的条目生效，按字节替换；
+     同一张映射表也会作用于 GetGlyphOutline（需另开 HookGlyphOutline = true），
+     覆盖直接抓取字形位图的引擎。
 
 3. 双击 HookFont.exe 启动游戏。
 

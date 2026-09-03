@@ -34,6 +34,7 @@
 - **x86 / x64 双平台**：32 位与 64 位游戏均可使用，仓库附带 Detours x86 + x64 静态库
 - **窗口标题替换**：Hook `CreateWindowExA/W` + `SetWindowTextA/W`，创建窗口与运行时改标题都会被替换（宽字符安全）
 - **字符级替换（ExtTextOut/TextOut）**：`[CharMap]` 段逐字符映射表，文本经 GDI `ExtTextOut`/`TextOut` 绘制前逐字替换——用于引擎锁定字体、个别字符变豆腐块时的兜底（如日文标点/假名按字形近似替换）
+- **字形级替换（GetGlyphOutline）**：同一 `[CharMap]` 表作用于 `GetGlyphOutlineA/W` 字形查询——覆盖不渲染文本、直接抓取字形位图的老 DirectX 引擎（与 ExtTextOut 替换互补）
 - **免配置环境**：配置按程序自身目录解析，不依赖当前工作目录；中文路径自动转 8.3 短路径
 - **延迟 Hook**：从工作线程延迟执行 Hook，规避加载器锁死锁风险
 - **日志排查**：运行日志落盘（`HookFont.log`），异常可追查，不弹窗卡游戏
@@ -75,7 +76,7 @@ flowchart LR
     G2 --> H
     H --> I[日文游戏正确显示中文]
     E --> J[可选：替换窗口标题<br/>CreateWindowEx + SetWindowText]
-    E --> K[可选：ExtTextOut/TextOut<br/>按 CharMap 逐字符替换]
+    E --> K[可选：ExtTextOut/TextOut 字符级替换<br/>+ GetGlyphOutline 字形级替换<br/>按 CharMap 逐字映射]
 ```
 
 ## 🚀 使用（部署给玩家）
@@ -109,6 +110,7 @@ HookGdiplus = true
 AutoInstallFonts = true
 HookWindowTitle = false
 HookTextOut = false        ; 字符级替换开关（配合下方 [CharMap]）
+HookGlyphOutline = false   ; 字形级替换开关（同样走 [CharMap]，老 DirectX 引擎兜底）
 
 [FontMap]
 MS Gothic = 黑体
@@ -173,6 +175,7 @@ MSBuild.exe HookFont.sln /t:Rebuild /p:Configuration=Release /p:Platform=x64
 - 新增 **候选字体回退**：`FontName` 支持逗号分隔列表，自动选用第一个已安装字体
 - 窗口标题替换升级为 **`CreateWindowExA/W` + `SetWindowTextA/W` 四 API 宽字符 Hook**，运行中改标题也生效
 - 新增 **`[CharMap]` 字符级替换**（ExtTextOut/TextOut）：逐字符映射表，Hook `ExtTextOutW/A`（TextOut 内部经 ExtTextOut 覆盖），用于引擎锁定字体、字符变豆腐块时的兜底
+- 新增 **字形级替换**（GetGlyphOutlineA/W）：同一 `[CharMap]` 表作用于字形查询，覆盖直接抓取字形位图的老 DirectX 引擎
 - 新增 **注入已运行进程**（`-pid`）与**命令行启动 / 参数透传**
 - 新增 **x64 支持**：附带 Detours x64 静态库，`Release | x64` 开箱即用
 - 注入 DLL 内的失败提示由弹窗改为**日志文件**，避免弹窗卡死游戏

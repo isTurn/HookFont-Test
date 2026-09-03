@@ -136,6 +136,7 @@ static void StartHook()
 		if (ReadIniKey(keys, L"HookDirectWrite", true))          HookDirectWrite();
 		if (ReadIniKey(keys, L"HookGdiplus", true))              HookGdiplus();
 		if (ReadIniKey(keys, L"HookTextOut", false))             HookTextOut();
+		if (ReadIniKey(keys, L"HookGlyphOutline", false))        HookGlyphOutline();
 
 		// Optional: replace the game window title (common in translation patches).
 		if (ReadIniKey(keys, L"HookWindowTitle", false))
