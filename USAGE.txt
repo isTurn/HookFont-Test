@@ -33,9 +33,18 @@
      CharsetSpoof = false （字符集伪装，默认关闭。开启后只替换字体名、保留引擎
                 请求的字符集，适合 Shift-JIS 引擎（AGE 等日系 galgame 引擎）：
                 这类引擎会按创建字体时的字符集判断文本编码，强制 Charset 会把
-                Shift-JIS 文本按 GBK 解析导致乱码（界面文字变成重复的“赛赛赛/
-                记记记”）。开启时 Charset 配置不生效，FontName 请用中日文兼容
-                字体（微软雅黑 / MS Gothic），保证日文假名与汉字都有字形）
+                Shift-JIS 文本按 GBK 解析导致乱码）。开启时 Charset 配置不生效，
+                FontName 请用中日文兼容字体（微软雅黑 / MS Gothic），保证日文
+                假名与汉字都有字形）
+     字体度量调整（只作用于"被替换"的字体，全部默认保持原值）：
+       FontHeightScale = 100  高度百分比（200 = 放大一倍，50 = 缩小一半）
+       FontWidthScale  = 100  宽度百分比
+       FontWeight      = 0    粗细：0 = 保持原值（400=常规，700=粗体）
+       FontItalic      = -1   倾斜：-1 = 保持原值（0=不倾斜，1=倾斜）
+       FontExtraScale  = 100  字距百分比（SetTextCharacterExtra；不等于 100 时
+                              自动 Hook 该 API 按比例缩放引擎设置的字距）
+                 用途：替换字体后行距 / 字宽 / 粗细不适配（文字错位、重叠、
+                 太细太粗）时逐项微调。
      HookCreateFontA / HookCreateFontIndirectA / HookCreateFontW / HookCreateFontIndirectW
               = true / false （是否 Hook 对应的 GDI 字体创建 API，一般全开）
      HookDirectWrite = true  （是否 Hook DirectWrite 引擎；WPF/Unity 等现代
@@ -58,6 +67,7 @@
      说明：会同时 Hook CreateWindowExA/W 与 SetWindowTextA/W，
      游戏创建窗口时和运行时改标题都会被替换（宽字符安全）。
      HookTextOut = false （字符级替换开关，配合下方 [CharMap] 段使用，
+                覆盖 ExtTextOut / TextOut（TextOut 内部经 ExtTextOut））
                 默认关闭；开启后对 ExtTextOut / TextOut 绘制的文本逐字符替换，
                 用于引擎锁定字体、个别字符显示为豆腐块时的兜底）
      HookGlyphOutline = false （字形级替换开关，同样走 [CharMap]；
@@ -65,6 +75,10 @@
                 （老 DirectX 光栅化），字体替换与 ExtTextOut 都覆盖不到，
                 开启后按 [CharMap] 把字符换成目标字形再取轮廓。
                 建议与 HookTextOut 一起开启）
+     AutoSC = false （繁简自动映射，默认关闭。开启后 ExtTextOutW 绘制的宽文本
+                先自动把繁体字形映射为简体（如"東"→"东"），再应用 [CharMap]。
+                适合繁体汉化版 / 想直接把日文汉字显示为简体字形的场景。
+                需 HookTextOut = true 配合；仅作用于宽字符（W 版）路径）
 
    [FontMap] 段（可选，按"原字体名 → 新字体名"替换）
      键 = 游戏请求的字体名，值 = 替换成的字体（值也可写候选列表）

@@ -123,6 +123,17 @@ static void StartHook()
 		bool bCharsetSpoof = ReadIniKey(keys, L"CharsetSpoof", false);
 		SetCharsetSpoof(bCharsetSpoof);
 
+		// Font metrics adjustment (SimpleFontHook-style): scale height/width of
+		// replaced fonts, optionally override weight/italic and inter-character
+		// spacing. All keys default to "keep original".
+		int iHeightScale = (int)ReadIniKey(keys, L"FontHeightScale", 100);
+		int iWidthScale  = (int)ReadIniKey(keys, L"FontWidthScale", 100);
+		int iWeight      = (int)ReadIniKey(keys, L"FontWeight", 0);
+		int iItalic      = (int)ReadIniKey(keys, L"FontItalic", -1);
+		int iExtraScale  = (int)ReadIniKey(keys, L"FontExtraScale", 100);
+		ConfigureFontAdjust(iHeightScale, iWidthScale, iWeight, iItalic, iExtraScale);
+		if (iExtraScale != 100) HookSetTextCharacterExtra();
+
 		// Diagnostics: warn loudly when a configured target font is missing, so
 		// "font didn't switch" issues are obvious in the log. Runs after fonts\
 		// auto-install so session-registered fonts count as available.
@@ -141,6 +152,11 @@ static void StartHook()
 			mpChars[key[0]] = val[0];
 		}
 		ConfigureCharMap(mpChars);
+
+		// Auto traditional -> simplified mapping (applied on ExtTextOutW text before
+		// [CharMap]; needs HookTextOut = true below).
+		bool bAutoSC = ReadIniKey(keys, L"AutoSC", false);
+		ConfigureAutoSC(bAutoSC);
 
 		if (ReadIniKey(keys, L"HookCreateFontA", true))          HookCreateFontA();
 		if (ReadIniKey(keys, L"HookCreateFontIndirectA", true))  HookCreateFontIndirectA();
@@ -162,7 +178,7 @@ static void StartHook()
 			}
 		}
 
-		LogPrint(L"HookFont initialized. Charset=0x%02X Font=%ls FontMap=%d CharMap=%d Spoof=%d", uiCharSet, wsFontName.c_str(), (int)vFontMap.size(), (int)mpChars.size(), (int)bCharsetSpoof);
+		LogPrint(L"HookFont initialized. Charset=0x%02X Font=%ls FontMap=%d CharMap=%d Spoof=%d AutoSC=%d", uiCharSet, wsFontName.c_str(), (int)vFontMap.size(), (int)mpChars.size(), (int)bCharsetSpoof, (int)bAutoSC);
 	}
 	catch (const std::exception& err)
 	{

@@ -247,7 +247,9 @@
     </div>
     <div class="feat-grid">
       <div class="feat"><div class="f-ico">🈶</div><h3>强制字体替换</h3><p>Hook <code>CreateFontA/W</code>、<code>CreateFontIndirectA/W</code> 四个 GDI 字体创建 API，统一替换为配置的字符集 + 字体。</p></div>
-      <div class="feat"><div class="f-ico">🎭</div><h3>字符集伪装</h3><p>对 Shift-JIS 引擎（AGE 等日系 galgame 引擎）只换字体名、保留引擎请求的字符集，避免强制 GB2312 把引擎文本按错误编码解析成"赛赛赛 / 记记记"乱码；配合中日兼容字体（微软雅黑 / MS Gothic）在不动编码的前提下换字体。</p></div>
+      <div class="feat"><div class="f-ico">🎭</div><h3>字符集伪装</h3><p>对 Shift-JIS 引擎（AGE 等日系 galgame 引擎）只换字体名、保留引擎请求的字符集，避免强制 GB2312 把引擎文本按错误编码解析成乱码；配合中日兼容字体（微软雅黑 / MS Gothic）在不动编码的前提下换字体。</p></div>
+      <div class="feat"><div class="f-ico">📐</div><h3>字体度量调整</h3><p><code>FontHeightScale</code> / <code>FontWidthScale</code>（百分比）、<code>FontWeight</code>、<code>FontItalic</code> 与 <code>FontExtraScale</code>（字距）——替换字体后按需修正行距 / 字宽 / 粗细，解决文字错位、重叠、过细过粗。</p></div>
+      <div class="feat"><div class="f-ico">🀄</div><h3>繁简自动映射</h3><p><code>AutoSC</code> 开启后 ExtTextOutW 文本自动把繁体字形映射为简体（"東"→"东"），再应用 <code>[CharMap]</code>——繁体汉化版 / 日文汉字直接显示简体字形。</p></div>
       <div class="feat"><div class="f-ico">🎨</div><h3>DirectWrite 补全</h3><p>Hook <code>IDWriteFactory::CreateTextFormat</code>、<code>CreateTextLayout</code> 与 <code>IDWriteTextLayout::SetFontFamilyName</code>（vtable 补丁，无 dwrite.lib 依赖），覆盖 WPF / Unity 等现代引擎，运行时改字体也生效。</p></div>
       <div class="feat"><div class="f-ico">🖌️</div><h3>GDI+ 全补全</h3><p>Hook <code>GdipCreateFontFamilyFromName</code>、<code>GdipCreateFont</code>（family+size 一步建字体，含缓存 family）与 <code>GdipCreateFontFromLogfontA/W</code>，走 GDI+ 的老游戏 / 引擎全部覆盖。</p></div>
       <div class="feat"><div class="f-ico">🔎</div><h3>字体缺失检测</h3><p>启动时校验 <code>FontName</code> 与 <code>[FontMap]</code> 每个目标字体是否已安装，缺失在日志标 <code>[FontCheck]</code> 告警——"字体没换过来"一眼定位。</p></div>
@@ -333,6 +335,11 @@
 <span class="k">Charset</span> = <span class="s">0x86</span>                       <span class="c"># 0x86=GB2312 简体中文</span>
 <span class="k">FontName</span> = <span class="s">黑体, 微软雅黑, 宋体</span>   <span class="c"># 候选列表，自动选首个已安装</span>
 <span class="k">CharsetSpoof</span> = <span class="s">false</span>              <span class="c"># 字符集伪装：Shift-JIS 引擎（AGE 等）只换字体名、保留引擎字符集，避免乱码</span>
+<span class="k">FontHeightScale</span> = <span class="s">100</span>            <span class="c"># 字体度量调整：高度百分比（100 = 不缩放）</span>
+<span class="k">FontWidthScale</span> = <span class="s">100</span>             <span class="c"># 宽度百分比</span>
+<span class="k">FontWeight</span> = <span class="s">0</span>                  <span class="c"># 粗细：0 = 保持原值（400 常规 / 700 粗体）</span>
+<span class="k">FontItalic</span> = <span class="s">-1</span>                 <span class="c"># 倾斜：-1 = 保持原值</span>
+<span class="k">FontExtraScale</span> = <span class="s">100</span>             <span class="c"># 字距百分比（SetTextCharacterExtra）</span>
 <span class="k">HookCreateFontA</span> = <span class="s">true</span>
 <span class="k">HookCreateFontIndirectA</span> = <span class="s">true</span>
 <span class="k">HookCreateFontW</span> = <span class="s">true</span>
@@ -342,6 +349,7 @@
 <span class="k">AutoInstallFonts</span> = <span class="s">true</span>          <span class="c"># 自动注册 fonts\ 目录字体</span>
 <span class="k">HookWindowTitle</span> = <span class="s">false</span>
 <span class="k">HookTextOut</span> = <span class="s">false</span>             <span class="c"># 字符级替换开关（配合 [CharMap]）</span>
+<span class="k">AutoSC</span> = <span class="s">false</span>                 <span class="c"># 繁简自动映射：繁体字形自动转简体后再应用 [CharMap]</span>
 <span class="k">HookGlyphOutline</span> = <span class="s">false</span>         <span class="c"># 字形级替换开关（老 DirectX 引擎兜底）</span>
 
 <span class="k">[FontMap]</span>                          <span class="c"># 按字体替换，优先于全局；支持通配</span>

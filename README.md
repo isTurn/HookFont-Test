@@ -24,7 +24,9 @@
 ## ✨ 特性
 
 - **强制字体替换**：Hook `CreateFontA/W`、`CreateFontIndirectA/W` 四个 GDI 字体创建 API，统一替换为配置的字符集（默认 `0x86` GB2312）+ 字体
-- **字符集伪装（CharsetSpoof）**：对 Shift-JIS 引擎（AGE 等日系 galgame 引擎）只替换字体名、保留引擎请求的字符集，避免强制 GB2312 破坏引擎的文本解码（症状：界面文字变成重复的"赛赛赛 / 记记记"）。开启后配合中日文兼容字体（微软雅黑 / MS Gothic）即可在不动编码的前提下换字体
+- **字符集伪装（CharsetSpoof）**：对 Shift-JIS 引擎（AGE 等日系 galgame 引擎）只替换字体名、保留引擎请求的字符集，避免强制 GB2312 破坏引擎的文本解码（乱码）。开启后配合中日文兼容字体（微软雅黑 / MS Gothic）即可在不动编码的前提下换字体
+- **字体度量调整**：`FontHeightScale` / `FontWidthScale`（百分比）、`FontWeight`（粗细）、`FontItalic`（倾斜）、`FontExtraScale`（字距）——替换字体后按需修正行距 / 字宽 / 粗细，解决文字错位、重叠、过细过粗
+- **繁简自动映射（AutoSC）**：`AutoSC = true` 时 ExtTextOutW 文本自动把繁体字形映射为简体（如"東"→"东"），再应用 `[CharMap]`——繁体汉化版 / 日文汉字直接显示简体字形的场景
 - **DirectWrite 补全**：Hook `IDWriteFactory::CreateTextFormat`、`CreateTextLayout` / `CreateGdiCompatibleTextLayout` 及 `IDWriteTextLayout::SetFontFamilyName`，完整覆盖 WPF / Unity 等现代渲染引擎游戏（运行中改字体也生效）
 - **GDI+ 支持**：Hook `GdipCreateFontFamilyFromName`、`GdipCreateFont`（family+size 一步建字体的缓存 family 场景）与 `GdipCreateFontFromLogfontA/W`，完整覆盖走 GDI+ 创建字体的老游戏 / 引擎
 - **字体缺失检测**：启动时校验全局 `FontName` 与 `[FontMap]` 每个目标字体是否真的已安装，缺失在 `HookFont.log` 标 `[FontCheck]` 告警——"字体没换过来"一眼定位
@@ -107,6 +109,12 @@ FontName = 黑体, 微软雅黑, 宋体
 ; 字符集伪装：对 Shift-JIS 引擎（AGE 等）只换字体名、保留引擎字符集。
 ; 开启时 Charset 不生效，请把 FontName 换成中日文兼容字体（微软雅黑 / MS Gothic）。
 CharsetSpoof = false
+; 字体度量调整（只作用于被替换的字体，100 = 不缩放；FontWeight 0 = 保持原值）
+FontHeightScale = 100
+FontWidthScale = 100
+FontWeight = 0
+FontItalic = -1
+FontExtraScale = 100        ; 字距百分比（SetTextCharacterExtra，非 100 自动 Hook）
 HookCreateFontA = true
 HookCreateFontIndirectA = true
 HookCreateFontW = true
@@ -117,6 +125,7 @@ AutoInstallFonts = true
 HookWindowTitle = false
 HookTextOut = false        ; 字符级替换开关（配合下方 [CharMap]）
 HookGlyphOutline = false   ; 字形级替换开关（同样走 [CharMap]，老 DirectX 引擎兜底）
+AutoSC = false             ; 繁简自动映射（ExtTextOutW 文本先繁→简再应用 [CharMap]）
 
 [FontMap]
 MS Gothic = 黑体

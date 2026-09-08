@@ -243,11 +243,58 @@ static void TestTextOut(const char* tag)
     DeleteObject(hf);
     DeleteDC(hdc);
 
-    WriteResult(tag, (BYTE)(b1 && b2 && b3), L"TEXTOUT_OK");
+	WriteResult(tag, (BYTE)(b1 && b2 && b3), L"TEXTOUT_OK");
 }
 
 
-// Glyph-level replacement: query the outline of a mapped char via
+// Auto simplified-Chinese mapping: draw a traditional-ideograph string through
+// ExtTextOutW. With AutoSC=true the injected DLL rewrites 東->东 before drawing;
+// the rewrite is verified from HookFont.log ("[AutoSC] N char(s) traditional ->
+// simplified"). Here we only prove the call succeeds and doesn't crash.
+static void TestAutoSC(const char* tag)
+{
+    HDC hdc = CreateCompatibleDC(NULL);
+    if (!hdc) { WriteResult(tag, 0, L"DC_FAIL"); return; }
+
+    HFONT hf = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                           DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"宋体");
+    HGDIOBJ hOld = SelectObject(hdc, hf);
+
+    const wchar_t* wsT = L"東京都庁";   // 東->东, 都->都, 京->京, 庁->厅(simplified of 廳)
+    BOOL b1 = ExtTextOutW(hdc, 10, 10, 0, NULL, wsT, (UINT)wcslen(wsT), NULL);
+
+    SelectObject(hdc, hOld);
+    DeleteObject(hf);
+    DeleteDC(hdc);
+
+    WriteResult(tag, (BYTE)b1, L"AUTOSC_OK");
+}
+
+
+// Font metrics adjustment: create a font with known metrics through
+// CreateFontIndirectW; when FontHeightScale/FontWidthScale/FontWeight are set
+// (default 100/100/0 keep original), the read-back LOGFONT reflects the scaled
+// values. Verified across runs: baseline vs. scaled config in test/HookFont.ini.
+static void TestFontMetrics(const char* tag)
+{
+    LOGFONTW lf = { 0 };
+    lf.lfHeight = 20;
+    lf.lfWidth = 10;
+    lf.lfWeight = FW_NORMAL;
+    lf.lfCharSet = ANSI_CHARSET;
+    wcscpy_s(lf.lfFaceName, L"MS Gothic");   // hit [FontMap] -> replaced font
+    HFONT hf = CreateFontIndirectW(&lf);
+    LOGFONTW lfOut = { 0 };
+    GetObjectW(hf, sizeof(lfOut), &lfOut);
+    wchar_t buf[96];
+    swprintf_s(buf, 96, L"h=%d w=%d wt=%d", (int)lfOut.lfHeight, (int)lfOut.lfWidth, (int)lfOut.lfWeight);
+    WriteResult(tag, (BYTE)lfOut.lfCharSet, buf);
+    DeleteObject(hf);
+}
+
+
+// Glyph-level replacement:
 // GetGlyphOutlineW/A. The injected DLL maps あ (U+3042) -> 阿 before the outline
 // is fetched; the rewrite is verified from HookFont.log ("[CharMap]
 // GetGlyphOutline*: U+3042 -> U+963F"). Here we only prove the calls succeed
@@ -373,8 +420,10 @@ int main()
     TestGdiplusCreate(L"MS Gothic", "GdiplusCreate");
     TestSetWindowTextW("WindowTitle");
     TestTextOut("TextOut");
+    TestAutoSC("AutoSC");
     TestGlyphOutline("Glyph");
     TestCharsetSpoof();
+    TestFontMetrics("FontMetrics");
 
     return 0;
 }

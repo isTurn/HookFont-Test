@@ -20,6 +20,11 @@ namespace Rut
 		//=====================================================================
 		static DWORD        sg_dwCharSet = DEFAULT_CHARSET;
 		static bool         sg_bCharsetSpoof = false;   // keep engine charset, only swap face name
+		static int          sg_iFontHeightScale = 100; // percent, 100 = keep
+		static int          sg_iFontWidthScale  = 100; // percent, 100 = keep
+		static int          sg_iFontWeight      = 0;    // 0 = keep original
+		static int          sg_iFontItalic      = -1;   // -1 = keep original
+		static int          sg_iFontExtraScale  = 100;  // SetTextCharacterExtra percent
 		static std::wstring sg_wsGlobalFontW;      // resolved global replacement (first installed candidate)
 		static FontMapListT   sg_vFontMap;           // ordered per-font map (may contain wildcards)
 
@@ -245,6 +250,15 @@ namespace Rut
 			sg_bCharsetSpoof = bEnable;
 		}
 
+		void ConfigureFontAdjust(int iHeightScale, int iWidthScale, int iWeight, int iItalic, int iExtraScale)
+		{
+			sg_iFontHeightScale = (iHeightScale > 0 && iHeightScale <= 500) ? iHeightScale : 100;
+			sg_iFontWidthScale  = (iWidthScale  > 0 && iWidthScale  <= 500) ? iWidthScale  : 100;
+			sg_iFontWeight      = (iWeight  >= 0 && iWeight  <= 1000) ? iWeight  : 0;
+			sg_iFontItalic      = (iItalic == 0 || iItalic == 1) ? iItalic : -1;
+			sg_iFontExtraScale  = (iExtraScale > 0 && iExtraScale <= 500) ? iExtraScale : 100;
+		}
+
 		//=====================================================================
 		// GDI font-creation hooks
 		//=====================================================================
@@ -258,6 +272,10 @@ namespace Rut
 				if (!sg_bCharsetSpoof)               // charset spoof: keep engine's charset
 					iCharSet = sg_dwCharSet;
 				pszFaceName = sFace;
+				cHeight = MulDiv(cHeight, sg_iFontHeightScale, 100);
+				cWidth  = MulDiv(cWidth,  sg_iFontWidthScale, 100);
+				if (sg_iFontWeight > 0)  cWeight = (INT)sg_iFontWeight;
+				if (sg_iFontItalic >= 0) bItalic = (DWORD)sg_iFontItalic;
 			}
 			return rawCreateFontA(cHeight, cWidth, cEscapement, cOrientation, cWeight, bItalic, bUnderline, bStrikeOut, iCharSet, iOutPrecision, iClipPrecision, iQuality, iPitchAndFamily, pszFaceName);
 		}
@@ -279,6 +297,10 @@ namespace Rut
 				if (!sg_bCharsetSpoof)               // charset spoof: keep engine's charset
 					iCharSet = sg_dwCharSet;
 				pszFaceName = wsFace;
+				cHeight = MulDiv(cHeight, sg_iFontHeightScale, 100);
+				cWidth  = MulDiv(cWidth,  sg_iFontWidthScale, 100);
+				if (sg_iFontWeight > 0)  cWeight = (INT)sg_iFontWeight;
+				if (sg_iFontItalic >= 0) bItalic = (DWORD)sg_iFontItalic;
 			}
 			return rawCreateFontW(cHeight, cWidth, cEscapement, cOrientation, cWeight, bItalic, bUnderline, bStrikeOut, iCharSet, iOutPrecision, iClipPrecision, iQuality, iPitchAndFamily, pszFaceName);
 		}
@@ -301,6 +323,10 @@ namespace Rut
 				if (!sg_bCharsetSpoof)               // charset spoof: keep engine's charset
 					lf2.lfCharSet = (BYTE)sg_dwCharSet;
 				strncpy_s(lf2.lfFaceName, LF_FACESIZE, sFace, _TRUNCATE);
+				lf2.lfHeight = MulDiv(lf2.lfHeight, sg_iFontHeightScale, 100);
+				lf2.lfWidth  = MulDiv(lf2.lfWidth,  sg_iFontWidthScale, 100);
+				if (sg_iFontWeight > 0) lf2.lfWeight = (LONG)sg_iFontWeight;
+				if (sg_iFontItalic >= 0) lf2.lfItalic = (BYTE)sg_iFontItalic;
 			}
 			return rawCreateFontIndirectA(&lf2);
 		}
@@ -323,6 +349,10 @@ namespace Rut
 				if (!sg_bCharsetSpoof)               // charset spoof: keep engine's charset
 					lf2.lfCharSet = (BYTE)sg_dwCharSet;
 				wcsncpy_s(lf2.lfFaceName, LF_FACESIZE, wsFace, _TRUNCATE);
+				lf2.lfHeight = MulDiv(lf2.lfHeight, sg_iFontHeightScale, 100);
+				lf2.lfWidth  = MulDiv(lf2.lfWidth,  sg_iFontWidthScale, 100);
+				if (sg_iFontWeight > 0) lf2.lfWeight = (LONG)sg_iFontWeight;
+				if (sg_iFontItalic >= 0) lf2.lfItalic = (BYTE)sg_iFontItalic;
 			}
 			return rawCreateFontIndirectW(&lf2);
 		}
@@ -332,6 +362,25 @@ namespace Rut
 			return DetourAttachFunc(&rawCreateFontIndirectW, newCreateFontIndirectW);
 		}
 		//*********END Hook CreateFontIndirectW*********
+
+
+
+		//*********Start Hook SetTextCharacterExtra*******
+		typedef int (WINAPI* pSetTextCharacterExtra)(HDC, INT);
+		static pSetTextCharacterExtra rawSetTextCharacterExtra = SetTextCharacterExtra;
+
+		int WINAPI newSetTextCharacterExtra(HDC hdc, INT nExtra)
+		{
+			if (sg_iFontExtraScale != 100)
+				nExtra = MulDiv(nExtra, sg_iFontExtraScale, 100);
+			return rawSetTextCharacterExtra(hdc, nExtra);
+		}
+
+		bool HookSetTextCharacterExtra()
+		{
+			return DetourAttachFunc(&rawSetTextCharacterExtra, newSetTextCharacterExtra);
+		}
+		//*********END Hook SetTextCharacterExtra*********
 
 
 		//=====================================================================
@@ -735,11 +784,27 @@ namespace Rut
 		static std::unordered_map<wchar_t, wchar_t> sg_mpCharMapW; // wchar -> wchar (ExtTextOutW)
 		static std::unordered_map<char, char>       sg_mpCharMapA; // byte  -> byte (ExtTextOutA, values <= 0xFF)
 		static bool                                 sg_bCharMapEnabled = false;
+		static bool                                 sg_bAutoSC = false;   // traditional -> simplified (ExtTextOutW)
 		static LogCallback                          sg_pfnLog = NULL;
 
 		void SetLogCallback(LogCallback pfn)
 		{
 			sg_pfnLog = pfn;
+		}
+
+		// Map a single CJK ideograph to its simplified form (or return it unchanged).
+		static wchar_t SimplifyChar(wchar_t ch)
+		{
+			if (ch < 0x3400 || (ch > 0x9FFF && (ch < 0xF900 || ch > 0xFAFF))) return ch;
+			wchar_t out[2] = { 0 };
+			int n = LCMapStringW(LOCALE_SYSTEM_DEFAULT, LCMAP_SIMPLIFIED_CHINESE, &ch, 1, out, 2);
+			if (n == 1 && out[0] != ch) return out[0];
+			return ch;
+		}
+
+		void ConfigureAutoSC(bool bEnable)
+		{
+			sg_bAutoSC = bEnable;
 		}
 
 		void ConfigureCharMap(const CharMapT& mpChars)
@@ -764,20 +829,42 @@ namespace Rut
 
 		static const wchar_t* MapCharsW(const wchar_t* wsIn, size_t nLen)
 		{
-			if (!sg_bCharMapEnabled || !wsIn || nLen == 0) return wsIn;
+			if (!wsIn || nLen == 0) return wsIn;
 
-			// fast path: no mapped char at all -> hand back the original pointer
-			size_t i = 0;
-			for (; i < nLen; ++i)
-				if (sg_mpCharMapW.count(wsIn[i])) break;
-			if (i == nLen) return wsIn;
+			// fast path: nothing to do -> hand back the original pointer
+			if (sg_bCharMapEnabled || sg_bAutoSC)
+			{
+				size_t i = 0;
+				for (; i < nLen; ++i)
+				{
+					wchar_t c = wsIn[i];
+					if (sg_bCharMapEnabled && sg_mpCharMapW.count(c)) break;
+					if (sg_bAutoSC && ((c >= 0x3400 && c <= 0x9FFF) || (c >= 0xF900 && c <= 0xFAFF))) break;
+				}
+				if (i == nLen) return wsIn;
+			}
+			else return wsIn;
 
 			tls_wsTextW.assign(wsIn, nLen);
-			for (; i < nLen; ++i)
+			size_t nSC = 0;
+			for (size_t i = 0; i < nLen; ++i)
 			{
-				auto ite = sg_mpCharMapW.find(tls_wsTextW[i]);
-				if (ite != sg_mpCharMapW.end()) tls_wsTextW[i] = ite->second;
+				wchar_t c = tls_wsTextW[i];
+				if (sg_bAutoSC)
+				{
+					wchar_t c0 = c;
+					c = SimplifyChar(c);                  // traditional -> simplified first
+					if (c != c0) ++nSC;
+				}
+				if (sg_bCharMapEnabled)
+				{
+					auto ite = sg_mpCharMapW.find(c);
+					if (ite != sg_mpCharMapW.end()) c = ite->second;
+				}
+				tls_wsTextW[i] = c;
 			}
+			if (nSC && sg_pfnLog)
+				sg_pfnLog(L"[AutoSC] %d char(s) traditional -> simplified", (int)nSC);
 			return tls_wsTextW.c_str();
 		}
 

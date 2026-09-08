@@ -35,6 +35,17 @@ namespace Rut
 		// while still getting the replaced (CJK-capable) font. Off by default.
 		void SetCharsetSpoof(bool bEnable);
 
+		// Font metrics adjustment (SimpleFontHook-style): applied only to faces that
+		// are actually replaced. iHeightScale/iWidthScale are percents (100 = keep);
+		// iWeight 0 = keep original, 400 = normal, 700 = bold; iItalic -1 = keep,
+		// 0 = upright, 1 = italic; iExtraScale is the SetTextCharacterExtra percent
+		// (100 = keep). Helps keep layout sane after font substitution.
+		void ConfigureFontAdjust(int iHeightScale, int iWidthScale, int iWeight, int iItalic, int iExtraScale);
+
+		// Attach the SetTextCharacterExtra hook (inter-character spacing scaling).
+		// Only needed when ConfigureFontAdjust received iExtraScale != 100.
+		bool HookSetTextCharacterExtra();
+
 		// Diagnostics: report via the log callback every configured target font
 		// (global FontName candidates + every [FontMap] value) that is NOT present
 		// on the system — so "why didn't it switch?" questions get answered fast.
@@ -81,6 +92,12 @@ namespace Rut
 		// For ExtTextOutA only entries whose value fits a single byte (<= 0xFF) are
 		// applied, byte-by-byte.
 		typedef std::unordered_map<wchar_t, wchar_t> CharMapT;
+
+		// Auto traditional -> simplified Chinese mapping: when enabled, wide text
+		// drawn through ExtTextOutW is simplified before [CharMap] applies (CJK
+		// ideographs only, string length preserved). Requires HookTextOut(). Off by
+		// default.
+		void ConfigureAutoSC(bool bEnable);
 
 		// Configure the character replacement table. Call before HookTextOut().
 		void ConfigureCharMap(const CharMapT& mpChars);
