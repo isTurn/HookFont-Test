@@ -164,7 +164,7 @@
      同一张映射表也会作用于 GetGlyphOutline（需另开 HookGlyphOutline = true），
      覆盖直接抓取字形位图的引擎。
 
-   [TextMap] 段（可选，作用于 ExtTextOut / DrawText / SetWindowText 的宽文本）
+   [TextMap] 段（可选，作用于 ExtTextOut / DrawText / SetWindowText / DirectWrite / GDI+ 的宽文本）
      格式：源子串 = 目标子串（源和目标都可以是多个字符）
      与 [CharMap] 的区别：[CharMap] 逐字符一对一替换；[TextMap] 整段子串替换，
      适合把固定词组 / 错误译名整段改掉。多条命中时取源子串最长的那条（最长匹配），

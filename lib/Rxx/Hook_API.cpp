@@ -829,6 +829,9 @@ namespace Rut
 
 
 
+		// MapCharsW is defined later (text replacement); forward-declare for DWrite/GDI+ hooks.
+		static const wchar_t* MapCharsW(const wchar_t* wsIn, size_t nLen);
+
 		//=====================================================================
 		// DirectWrite support
 		// DWriteCreateFactory -> patch IDWriteFactory::CreateTextFormat (vtable
@@ -931,7 +934,14 @@ namespace Rut
 				else raw = (pCreateTextLayout)vtbl[VTBL_CreateTextLayout]; // safety fallback
 			}
 
-			HRESULT hr = raw(pThis, string, stringLength, textFormat, maxWidth, maxHeight, textLayout);
+			const WCHAR* szText = string; UINT32 lenText = stringLength;
+			if (string && stringLength)
+			{
+				size_t n = (stringLength == (UINT32)-1) ? wcslen(string) : (size_t)stringLength;
+				const wchar_t* mapped = MapCharsW(string, n);
+				if (mapped != string) { szText = mapped; lenText = (UINT32)wcslen(mapped); }
+			}
+			HRESULT hr = raw(pThis, szText, lenText, textFormat, maxWidth, maxHeight, textLayout);
 			if (SUCCEEDED(hr) && textLayout && *textLayout)
 				PatchTextLayoutVtbl((IUnknown*)*textLayout);
 			return hr;
@@ -951,7 +961,14 @@ namespace Rut
 				else raw = (pCreateGdiCompatibleTextLayout)vtbl[VTBL_CreateGdiCompatibleTextLayout]; // safety fallback
 			}
 
-			HRESULT hr = raw(pThis, string, stringLength, textFormat, layoutWidth, layoutHeight, pixelsPerDip, transform, useGdiNatural, textLayout);
+			const WCHAR* szText = string; UINT32 lenText = stringLength;
+			if (string && stringLength)
+			{
+				size_t n = (stringLength == (UINT32)-1) ? wcslen(string) : (size_t)stringLength;
+				const wchar_t* mapped = MapCharsW(string, n);
+				if (mapped != string) { szText = mapped; lenText = (UINT32)wcslen(mapped); }
+			}
+			HRESULT hr = raw(pThis, szText, lenText, textFormat, layoutWidth, layoutHeight, pixelsPerDip, transform, useGdiNatural, textLayout);
 			if (SUCCEEDED(hr) && textLayout && *textLayout)
 				PatchTextLayoutVtbl((IUnknown*)*textLayout);
 			return hr;
@@ -1204,6 +1221,23 @@ namespace Rut
 			return g_rawGdipCreateFontFromLogfontA(hdc, lf, font);
 		}
 
+		// GdipDrawString: GDI+ text rendering entry point. Apply the same
+		// TextMap/CharMap/AutoSC pipeline so GDI+-based engines see substituted text.
+		typedef INT(WINAPI* pGdipDrawString)(void* graphics, const WCHAR* string, INT length, void* font, const void* layoutRect, void* stringFormat, void* brush);
+		static pGdipDrawString g_rawGdipDrawString = NULL;
+
+		static INT WINAPI HookGdipDrawString(void* graphics, const WCHAR* string, INT length, void* font, const void* layoutRect, void* stringFormat, void* brush)
+		{
+			if (string && length != 0)
+			{
+				size_t n = (length < 0) ? wcslen(string) : (size_t)length;
+				const wchar_t* mapped = MapCharsW(string, n);
+				if (mapped != string)
+					return g_rawGdipDrawString(graphics, mapped, (INT)wcslen(mapped), font, layoutRect, stringFormat, brush);
+			}
+			return g_rawGdipDrawString(graphics, string, length, font, layoutRect, stringFormat, brush);
+		}
+
 		bool HookGdiplus()
 		{
 			if (g_rawGdipCreateFontFamilyFromName && g_rawGdipCreateFont) return true;
@@ -1217,12 +1251,14 @@ namespace Rut
 			g_rawGdipDeleteFontFamily         = (pGdipDeleteFontFamily)GetProcAddress(hGdiplus, "GdipDeleteFontFamily");
 			g_rawGdipCreateFontFromLogfontA   = (pGdipCreateFontFromLogfontA)GetProcAddress(hGdiplus, "GdipCreateFontFromLogfontA");
 			g_rawGdipCreateFontFromLogfontW   = (pGdipCreateFontFromLogfontW)GetProcAddress(hGdiplus, "GdipCreateFontFromLogfontW");
+			g_rawGdipDrawString               = (pGdipDrawString)GetProcAddress(hGdiplus, "GdipDrawString");
 
 			bool ok = true;
 			if (g_rawGdipCreateFontFamilyFromName)  ok = DetourAttachFunc(&g_rawGdipCreateFontFamilyFromName, HookGdipCreateFontFamilyFromName) && ok;
 			if (g_rawGdipCreateFont)                ok = DetourAttachFunc(&g_rawGdipCreateFont, HookGdipCreateFont) && ok;
 			if (g_rawGdipCreateFontFromLogfontA)    ok = DetourAttachFunc(&g_rawGdipCreateFontFromLogfontA, HookGdipCreateFontFromLogfontA) && ok;
 			if (g_rawGdipCreateFontFromLogfontW)    ok = DetourAttachFunc(&g_rawGdipCreateFontFromLogfontW, HookGdipCreateFontFromLogfontW) && ok;
+			if (g_rawGdipDrawString)                ok = DetourAttachFunc(&g_rawGdipDrawString, HookGdipDrawString) && ok;
 
 			return ok;
 		}
