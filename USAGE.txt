@@ -231,3 +231,8 @@
      HookFont.exe <游戏.exe> [-diag] [-pid <PID>] [-listfonts] [-profile <名>]
      -profile <名>   选用 INI 里的 [HookFont:profile_<名>] 段，一套 INI 存多套字体配置。
      崩溃隔离：某个 Hook 挂载失败只在日志记 [Hook] xxx failed，不影响其余 Hook。
+
+[GUI]
+HookFont.exe -gui
+  打开托盘配置窗口：字体下拉选、开关勾选、实时预览，保存写回 INI，无需手改。
+  关闭窗口缩到系统托盘，双击托盘图标重新打开，右键菜单退出。

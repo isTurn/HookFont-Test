@@ -110,6 +110,7 @@ struct CmdLine
 	DWORD        dwPid = 0;
 	bool         bDiag = false;        // -diag: set HOOKFONT_DIAG=1 for the DLL
 	bool         bListFonts = false;   // -listfonts: dump installed fonts, no launch
+	bool         bGui = false;       // -gui: open tray config window
 	std::wstring wsExeOverride;   // command-line-specified game exe (may be relative)
 	std::wstring wsGameArgs;      // extra args passed through to the game
 	std::wstring wsProfile;       // -profile: named config section [HookFont:profile_*]
@@ -141,6 +142,10 @@ static CmdLine ParseCommandLine()
 		else if (arg == L"-listfonts" || arg == L"--listfonts" || arg == L"/listfonts")
 		{
 			cl.bListFonts = true;
+		}
+		else if (arg == L"-gui" || arg == L"--gui" || arg == L"/gui")
+		{
+			cl.bGui = true;
 		}
 		else if (arg == L"-profile" || arg == L"--profile" || arg == L"/profile")
 		{
@@ -264,6 +269,204 @@ static int ListFontsToFile(const std::wstring& wsExeDir)
 	return (int)setFaces.size();
 }
 
+
+// ============================================================================
+// (tier-5) Tray config GUI: pick font, toggle switches, live preview, Save.
+// Launched via `HookFont.exe -gui` or with no target specified.
+// ============================================================================
+#include <shellapi.h>
+#pragma comment(lib, "shell32.lib")
+
+#define IDC_GUI_COMBO    1001
+#define IDC_GUI_PREVIEW  1002
+#define IDC_GUI_SAVE     1003
+#define IDC_GUI_CHK_CHSP 1101
+#define IDC_GUI_CHK_AUTO  1102
+#define IDC_GUI_CHK_FACE  1103
+#define IDC_GUI_CHK_HOT   1104
+#define IDC_GUI_CHK_SEL   1105
+#define IDC_GUI_ED_SIZE   1201
+#define IDC_GUI_ED_NAME   1202
+#define WM_TRAYMSG       (WM_USER + 1)
+#define IDM_TRAY_OPEN    2001
+#define IDM_TRAY_EXIT    2002
+
+static HFONT g_hPreviewFont = NULL;
+static std::wstring g_wsIniPath;
+static NOTIFYICONDATAW g_ni = {0};
+
+static int CALLBACK GuiFontEnumProc(ENUMLOGFONTEXW* lf, NEWTEXTMETRICEXW*, int, LPARAM lParam)
+{
+    HWND hCombo = (HWND)lParam;
+    // dedupe by checking existing items
+    int n = (int)SendMessageW(hCombo, CB_GETCOUNT, 0, 0);
+    wchar_t buf[LF_FACESIZE] = { 0 };
+    for (int i = 0; i < n; ++i)
+    {
+        SendMessageW(hCombo, CB_GETLBTEXT, i, (LPARAM)buf);
+        if (_wcsicmp(buf, lf->elfLogFont.lfFaceName) == 0) return 1;
+    }
+    SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)lf->elfLogFont.lfFaceName);
+    return 1;
+}
+
+static void GuiSetPreviewFont(HWND hDlg, const std::wstring& wsFace)
+{
+    if (g_hPreviewFont) { DeleteObject(g_hPreviewFont); g_hPreviewFont = NULL; }
+    HDC hdc = GetDC(hDlg);
+    int nPx = MulDiv(20, GetDeviceCaps(hdc, LOGPIXELSX), 72);
+    ReleaseDC(hDlg, hdc);
+    g_hPreviewFont = CreateFontW(-nPx, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+        DEFAULT_PITCH | FF_DONTCARE, wsFace.c_str());
+    SendDlgItemMessageW(hDlg, IDC_GUI_PREVIEW, WM_SETFONT, (WPARAM)g_hPreviewFont, TRUE);
+    SetDlgItemTextW(hDlg, IDC_GUI_PREVIEW, L"测试文本 あいうえお ｱｲｳｴｵ");
+}
+
+static LRESULT CALLBACK GuiWndProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+    switch (msg)
+    {
+    case WM_CREATE:
+    {
+        HWND hCombo = CreateWindowW(L"COMBOBOX", NULL, CBS_DROPDOWNLIST | WS_VSCROLL | WS_CHILD | WS_VISIBLE,
+            12, 12, 380, 220, hWnd, (HMENU)IDC_GUI_COMBO, NULL, NULL);
+        {
+            HDC hdc = GetDC(NULL);
+            LOGFONTW lf = { 0 }; lf.lfCharSet = DEFAULT_CHARSET;
+            EnumFontFamiliesExW(hdc, &lf, (FONTENUMPROCW)GuiFontEnumProc, (LPARAM)hCombo, 0);
+            ReleaseDC(NULL, hdc);
+        }
+        CreateWindowW(L"BUTTON", L"字体(F):", WS_CHILD | WS_VISIBLE, 12, 44, 70, 18, hWnd, NULL, NULL, NULL);
+        CreateWindowW(L"EDIT", L"", WS_BORDER | WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 88, 42, 180, 20, hWnd, (HMENU)IDC_GUI_ED_NAME, NULL, NULL);
+        CreateWindowW(L"BUTTON", L"字号%:", WS_CHILD | WS_VISIBLE, 280, 44, 44, 18, hWnd, NULL, NULL, NULL);
+        CreateWindowW(L"EDIT", L"100", WS_BORDER | WS_CHILD | WS_VISIBLE | ES_NUMBER, 328, 42, 64, 20, hWnd, (HMENU)IDC_GUI_ED_SIZE, NULL, NULL, NULL);
+
+        CreateWindowW(L"BUTTON", L"CharsetSpoof", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 12, 72, 110, 20, hWnd, (HMENU)IDC_GUI_CHK_CHSP, NULL, NULL);
+        CreateWindowW(L"BUTTON", L"AutoSC 繁转简", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 130, 72, 110, 20, hWnd, (HMENU)IDC_GUI_CHK_AUTO, NULL, NULL);
+        CreateWindowW(L"BUTTON", L"FaceNameSpoof", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 248, 72, 120, 20, hWnd, (HMENU)IDC_GUI_CHK_FACE, NULL, NULL);
+        CreateWindowW(L"BUTTON", L"HotReload", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 12, 96, 110, 20, hWnd, (HMENU)IDC_GUI_CHK_HOT, NULL, NULL);
+        CreateWindowW(L"BUTTON", L"HookSelectObject", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX, 130, 96, 140, 20, hWnd, (HMENU)IDC_GUI_CHK_SEL, NULL, NULL);
+
+        CreateWindowW(L"STATIC", L"预览:", WS_CHILD | WS_VISIBLE, 12, 124, 40, 18, hWnd, NULL, NULL, NULL);
+        CreateWindowW(L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_CENTER | SS_SUNKEN, 12, 146, 380, 90, hWnd, (HMENU)IDC_GUI_PREVIEW, NULL, NULL);
+
+        CreateWindowW(L"BUTTON", L"保存到 INI", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, 280, 248, 112, 30, hWnd, (HMENU)IDC_GUI_SAVE, NULL, NULL);
+
+        // load current values
+        {
+            INI_File ini(g_wsIniPath);
+            if (ini.Has(L"HookFont"))
+            {
+                KeysMap& sec = ini[L"HookFont"];
+                auto get = [&](const wchar_t* k, const std::wstring& d)->std::wstring{ auto it=sec.find(k); return it==sec.end()?d:std::wstring(it->second); };
+                std::wstring face = get(L"FontName", L"黑体");
+                SetDlgItemTextW(hWnd, IDC_GUI_ED_NAME, face.c_str());
+                int n = (int)SendMessageW(hCombo, CB_FINDSTRINGEXACT, 0, (LPARAM)face.c_str());
+                if (n != CB_ERR) SendMessageW(hCombo, CB_SETCURSEL, n, 0);
+                SetDlgItemTextW(hWnd, IDC_GUI_ED_SIZE, get(L"FontSizeScale", L"100").c_str());
+                SendMessageW(GetDlgItem(hWnd, IDC_GUI_CHK_CHSP), BM_SETCHECK, get(L"CharsetSpoof",L"false")==L"true"?BST_CHECKED:BST_UNCHECKED, 0);
+                SendMessageW(GetDlgItem(hWnd, IDC_GUI_CHK_AUTO), BM_SETCHECK, get(L"AutoSC",L"false")==L"true"?BST_CHECKED:BST_UNCHECKED, 0);
+                SendMessageW(GetDlgItem(hWnd, IDC_GUI_CHK_FACE), BM_SETCHECK, get(L"FaceNameSpoof",L"false")==L"true"?BST_CHECKED:BST_UNCHECKED, 0);
+                SendMessageW(GetDlgItem(hWnd, IDC_GUI_CHK_HOT), BM_SETCHECK, get(L"HotReload",L"false")==L"true"?BST_CHECKED:BST_UNCHECKED, 0);
+                SendMessageW(GetDlgItem(hWnd, IDC_GUI_CHK_SEL), BM_SETCHECK, get(L"HookSelectObject",L"false")==L"true"?BST_CHECKED:BST_UNCHECKED, 0);
+            }
+            std::wstring prevFace = L"黑体"; { auto it=ini[L"HookFont"].find(L"FontName"); if (it!=ini[L"HookFont"].end()) prevFace=std::wstring(it->second); }
+            GuiSetPreviewFont(hWnd, prevFace);
+        }
+
+        // tray icon
+        g_ni.cbSize = sizeof(g_ni);
+        g_ni.hWnd = hWnd;
+        g_ni.uID = 1;
+        g_ni.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+        g_ni.uCallbackMessage = WM_TRAYMSG;
+        g_ni.hIcon = LoadIconW(NULL, IDI_APPLICATION);
+        lstrcpyW(g_ni.szTip, L"HookFont 配置");
+        Shell_NotifyIconW(NIM_ADD, &g_ni);
+        return 0;
+    }
+    case WM_COMMAND:
+        if (HIWORD(wp) == CBN_SELCHANGE && LOWORD(wp) == IDC_GUI_COMBO)
+        {
+            wchar_t buf[LF_FACESIZE] = { 0 };
+            SendMessageW((HWND)lp, CB_GETLBTEXT, SendMessageW((HWND)lp, CB_GETCURSEL, 0, 0), (LPARAM)buf);
+            SetDlgItemTextW(hWnd, IDC_GUI_ED_NAME, buf);
+            GuiSetPreviewFont(hWnd, buf);
+        }
+        else if (LOWORD(wp) == IDC_GUI_SAVE)
+        {
+            wchar_t face[256] = {0}, sz[16] = {0};
+            GetDlgItemTextW(hWnd, IDC_GUI_ED_NAME, face, 256);
+            GetDlgItemTextW(hWnd, IDC_GUI_ED_SIZE, sz, 16);
+            INI_File ini(g_wsIniPath);
+            KeysMap& sec = ini[L"HookFont"];
+            sec[L"FontName"] = face;
+            if (sz[0]) sec[L"FontSizeScale"] = sz;
+            sec[L"CharsetSpoof"] = (SendMessageW(GetDlgItem(hWnd, IDC_GUI_CHK_CHSP), BM_GETCHECK,0,0)==BST_CHECKED)?L"true":L"false";
+            sec[L"AutoSC"]       = (SendMessageW(GetDlgItem(hWnd, IDC_GUI_CHK_AUTO), BM_GETCHECK,0,0)==BST_CHECKED)?L"true":L"false";
+            sec[L"FaceNameSpoof"]= (SendMessageW(GetDlgItem(hWnd, IDC_GUI_CHK_FACE), BM_GETCHECK,0,0)==BST_CHECKED)?L"true":L"false";
+            sec[L"HotReload"]    = (SendMessageW(GetDlgItem(hWnd, IDC_GUI_CHK_HOT), BM_GETCHECK,0,0)==BST_CHECKED)?L"true":L"false";
+            sec[L"HookSelectObject"]=(SendMessageW(GetDlgItem(hWnd, IDC_GUI_CHK_SEL), BM_GETCHECK,0,0)==BST_CHECKED)?L"true":L"false";
+            ini.Save(g_wsIniPath);
+            GuiSetPreviewFont(hWnd, face);
+            NOTIFYICONDATAW t = g_ni; lstrcpyW(t.szTip, L"已保存"); Shell_NotifyIconW(NIM_MODIFY, &t);
+        }
+        break;
+    case WM_CLOSE:
+        ShowWindow(hWnd, SW_HIDE);   // hide to tray
+        return 0;
+    case WM_TRAYMSG:
+        if (lp == WM_RBUTTONUP)
+        {
+            POINT pt; GetCursorPos(&pt);
+            HMENU hm = CreatePopupMenu();
+            AppendMenuW(hm, MF_STRING, IDM_TRAY_OPEN, L"打开配置");
+            AppendMenuW(hm, MF_STRING, IDM_TRAY_EXIT, L"退出");
+            SetForegroundWindow(hWnd);
+            int r = TrackPopupMenu(hm, TPM_RIGHTBUTTON | TPM_RETURNCMD, pt.x, pt.y, 0, hWnd, NULL);
+            DestroyMenu(hm);
+            if (r == IDM_TRAY_EXIT) { DestroyWindow(hWnd); }
+            else if (r == IDM_TRAY_OPEN) { ShowWindow(hWnd, SW_SHOW); SetForegroundWindow(hWnd); }
+        }
+        else if (lp == WM_LBUTTONDBLCLK) { ShowWindow(hWnd, SW_SHOW); SetForegroundWindow(hWnd); }
+        break;
+    case WM_DESTROY:
+        Shell_NotifyIconW(NIM_DELETE, &g_ni);
+        if (g_hPreviewFont) DeleteObject(g_hPreviewFont);
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProcW(hWnd, msg, wp, lp);
+}
+
+static bool RunGui(HINSTANCE hInst, const std::wstring& wsIniPath)
+{
+    g_wsIniPath = wsIniPath;
+    WNDCLASSW wc = { 0 };
+    wc.lpfnWndProc = GuiWndProc;
+    wc.hInstance = hInst;
+    wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
+    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    wc.lpszClassName = L"HookFontGui";
+    RegisterClassW(&wc);
+
+    int W = 420, H = 310;
+    int sx = (GetSystemMetrics(SM_CXSCREEN) - W) / 2;
+    int sy = (GetSystemMetrics(SM_CYSCREEN) - H) / 2;
+    HWND hWnd = CreateWindowW(L"HookFontGui", L"HookFont 配置", WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME & ~WS_MAXIMIZEBOX,
+        sx, sy, W, H, NULL, NULL, hInst, NULL);
+    ShowWindow(hWnd, SW_SHOW);
+
+    MSG msg;
+    while (GetMessageW(&msg, NULL, 0, 0) > 0)
+    {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+    return true;
+}
+
 INT APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nShowCmd)
 {
 	// Resolve everything relative to this EXE's own directory,
@@ -291,6 +494,13 @@ INT APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
 		{
 			MessageBoxW(NULL, L"Cannot write fonts_list.txt next to HookFont.exe.", L"HookFont -listfonts", MB_OK | MB_ICONERROR);
 		}
+		return 0;
+	}
+
+	// GUI mode: tray config window. Auto-launch when no target and not -pid.
+	if (cl.bGui)
+	{
+		RunGui(hInstance, wsIniPath);
 		return 0;
 	}
 

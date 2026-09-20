@@ -248,3 +248,12 @@ MSBuild.exe HookFont.sln /t:Rebuild /p:Configuration=Release /p:Platform=x64
 ---
 
 *字体替换依赖 [Microsoft Detours](https://github.com/microsoft/Detours)（MIT），随仓库附带 x86 与 x64 版。*
+
+## GUI 配置窗口
+
+运行 `HookFont.exe -gui` 打开托盘配置窗口：
+
+- 字体下拉框自动枚举系统字体，选中即实时预览（中文/日文/半角片假名字样）
+- 勾选 CharsetSpoof / AutoSC / FaceNameSpoof / HotReload / HookSelectObject
+- 填写 FontName 与 FontSizeScale，点“保存到 INI”写回 `HookFont.ini`
+- 关闭窗口缩到系统托盘，双击重开、右键退出

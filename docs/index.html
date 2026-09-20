@@ -261,6 +261,7 @@
       <div class="feat"><div class="f-ico">🚀</div><h3>Detours 注入</h3><p>基于 Microsoft Detours 挂起创建目标进程并注入 DLL，稳定可靠；DLL 自身目录解析 INI，不依赖工作目录。</p></div>
       <div class="feat"><div class="f-ico">💉</div><h3>注入已运行进程</h3><p><code>HookFont.exe -pid &lt;PID&gt;</code> 直接向已运行进程注入——Steam / 官方启动器拉起游戏、或需进主菜单后再挂补丁的场景。</p></div>
       <div class="feat"><div class="f-ico">⌨️</div><h3>命令行启动</h3><p><code>HookFont.exe &lt;game.exe&gt; [参数...]</code> 直接指定游戏并透传启动参数，无需改 ini。</p></div>
+      <div class="feat"><div class="f-ico">🖱️</div><h3>托盘 GUI</h3><p>运行 <code>HookFont.exe -gui</code> 打开配置窗口：字体下拉枚举系统字体、实时预览、开关勾选，一键写回 INI，不用手改。</p></div>
       <div class="feat"><div class="f-ico">🧩</div><h3>x86 / x64 双平台</h3><p>32 位与 64 位游戏均可使用，仓库附带 Detours x86 + x64 双平台静态库。</p></div>
       <div class="feat"><div class="f-ico">🪟</div><h3>窗口标题替换</h3><p>Hook <code>CreateWindowExA/W</code> 与 <code>SetWindowTextA/W</code> 四 API，创建窗口与运行时改标题都被替换（宽字符安全）。</p></div>
       <div class="feat"><div class="f-ico">🔤</div><h3>字符级替换</h3><p><code>[CharMap]</code> 逐字符映射表，文本经 <code>ExtTextOut</code>/<code>TextOut</code> 绘制前逐字替换——引擎锁定字体、字符变豆腐块时的兜底。</p></div>
