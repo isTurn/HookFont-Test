@@ -148,6 +148,7 @@ static void ApplyConfig(bool bFirst)
 			L"HookWindowTitle", L"RawWindowTitle", L"NewWindowTitle",
 			L"HookTextOut", L"HookGlyphOutline", L"HookDrawText", L"HookSetWindowText",
 			L"AutoSC", L"FaceNameSpoof", L"EnumFontSpoof", L"Diagnostic", L"HotReload",
+				L"HookSelectObject", L"DpiScaleAuto", L"HookMainModuleOnly",
 		};
 		for (const auto& kv : ini.GetOrdered(L"HookFont"))
 		{
@@ -234,6 +235,10 @@ static void ApplyConfig(bool bFirst)
 	int iLineHeightScale = (int)ReadIniKey(keys, L"LineHeightScale", 100);
 	ConfigureLineHeight(iLineHeightScale);
 
+	// (tier-4) DPI-aware size compensation + main-module-only replacement.
+	ConfigureDpiScale((bool)ReadIniKey(keys, L"DpiScaleAuto", false));
+	ConfigureMainModuleFilter((bool)ReadIniKey(keys, L"HookMainModuleOnly", false), (void*)g_hModule);
+
 	// Code-page redirect: Shift-JIS engines decode their byte stream with the
 	// code page they request (932). Redirect it to 936 (GBK) / 65001 (UTF-8) so
 	// the engine reads Chinese text directly. 0 = off; CPRedirectFrom is the
@@ -290,6 +295,7 @@ static void ApplyConfig(bool bFirst)
 		if (ReadIniKey(keys, L"HookGlyphOutline", false))        HookGlyphOutline();
 		if (ReadIniKey(keys, L"HookDrawText", false))            HookDrawText();
 		if (bControlText)                                       HookControlText();
+		if (ReadIniKey(keys, L"HookSelectObject", false))      HookSelectObject();
 		if (iExtraScale != 100)                                  HookSetTextCharacterExtra();
 		if (iLineHeightScale != 100)                             HookGetTextMetrics();
 		if (dwCPRedirectTo)                                      HookCodePage();
@@ -378,6 +384,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		break;
 
 	case DLL_PROCESS_DETACH:
+			DumpFontStats();  // (tier-4) requested/replaced font summary
 		break;
 	}
 

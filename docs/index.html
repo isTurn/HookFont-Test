@@ -276,6 +276,9 @@
       <div class="feat"><div class="f-ico">🌐</div><h3>INI 编码自动识别</h3><p>UTF-8（含 BOM）、UTF-16（记事本"Unicode"）、ANSI/GBK（记事本"ANSI"）三种编码自动识别，存成哪种都能正确解析。</p></div>
       <div class="feat"><div class="f-ico">🔤</div><h3>字体清单</h3><p><code>HookFont.exe -listfonts</code> 把系统全部可用字体名写到 <code>fonts_list.txt</code>，选 <code>FontName</code> / <code>[FontMap]</code> 照着填，不猜拼写。</p></div>
       <div class="feat"><div class="f-ico">🧯</div><h3>日志滚动 + 键名告警</h3><p>日志超 2MB 自动滚动成 <code>.old</code> 不撑爆磁盘；INI 里写错 / 不认的键在日志打 <code>[Config] WARNING: unknown key ...</code>，不静默失效。</p></div>
+      <div class="feat"><div class="f-ico">🎯</div><h3>SelectObject 兜底</h3><p>引擎从资源直接加载字体、绕过 <code>CreateFont</code> 时，只要把字体选进 DC（<code>HookSelectObject=true</code>）就一并替换——覆盖面最广的兜底。</p></div>
+      <div class="feat"><div class="f-ico">📊</div><h3>未替换字体统计</h3><p>退出时日志打 <code>[FontStats]</code>，列出引擎请求过的每个字体及是否命中替换——一眼看清还有谁没被覆盖。</p></div>
+      <div class="feat"><div class="f-ico">🖥️</div><h3>DPI 补偿 + 模块白名单</h3><p><code>DpiScaleAuto</code> 高 DPI 屏按系统 DPI/96 自动微调字号；<code>HookMainModuleOnly</code> 只换游戏主模块字体，系统 / 输入法 / 叠加层不动。</p></div>
     </div>
   </div>
 </section>

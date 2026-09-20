@@ -69,6 +69,12 @@
 	       HookSetWindowText = false  SetWindowTextA/W 也走 [TextMap]/[CharMap]/AutoSC
 	                              （按钮、对话框、状态栏等用 SetWindowText 设置的文本；
 	                              与 HookWindowTitle 互不冲突，标题规则优先）。
+
+	       HookSelectObject   = false  SelectObject 兜底：引擎从资源直接加载字体、
+	                              绕过 CreateFont 时，只要选入 DC 就一并替换。
+	       DpiScaleAuto       = false  高 DPI 屏按系统 DPI/96 自动微调字号。
+	       HookMainModuleOnly = false  只替换游戏主模块创建的字体，系统 DLL /
+	                              输入法 / 叠加层的字体不动，减少冲突。
 	       Diagnostic     = false  诊断模式：只记录、不替换——每次字体创建请求（字体名 /
 	                              字符集 / 字号 / 质量）与一段文本绘制写进日志，用于排查
 	                              "为什么字体没换过来"。也可用启动器 -diag 开启（等价）。

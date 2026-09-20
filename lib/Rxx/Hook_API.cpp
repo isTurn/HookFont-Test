@@ -10,6 +10,9 @@
 #include <unordered_set>
 #include <cwchar>
 #include <algorithm>
+#include <map>
+#include <set>
+#include <intrin.h>
 
 
 namespace Rut
@@ -153,12 +156,70 @@ namespace Rut
 		static thread_local std::string  tls_sResultA;
 		static thread_local std::wstring tls_wsTemp;
 
+		// (tier-4) requested/replaced font statistics, DPI scale, main-module filter,
+		// and SelectObject fallback cache.
+		static std::map<std::wstring, int>        sg_mapReqCount;      // requested face -> hit count
+		static std::set<std::wstring>             sg_setReplReq;       // requested faces that got replaced
+		static int                               sg_iDpiScalePct = 100;
+		static bool                              sg_bMainOnly = false;
+		static HMODULE                           sg_hMainMod = NULL;
+		static std::unordered_map<HFONT, HFONT>  sg_mapSelReplaced;   // original -> replacement
+		static std::vector<HANDLE>               sg_vMemFontHandles;  // AddFontMemResourceEx handles
+
+		// DPI-aware size compensation: scale |lfHeight| by system DPI/96 when enabled.
+		void ConfigureDpiScale(bool bAuto)
+		{
+			if (!bAuto) { sg_iDpiScalePct = 100; return; }
+			HDC hdc = GetDC(NULL);
+			int dpi = hdc ? GetDeviceCaps(hdc, LOGPIXELSX) : 96;
+			if (hdc) ReleaseDC(NULL, hdc);
+			sg_iDpiScalePct = (dpi > 0 && dpi != 96) ? MulDiv(100, dpi, 96) : 100;
+		}
+
+		// Only replace fonts created by the game's main module; system DLLs / overlays /
+		// input-method fonts are left alone (reduces conflicts and unexpected re-render).
+		void ConfigureMainModuleFilter(bool bEnable, void* hMain)
+		{
+			sg_bMainOnly = bEnable;
+			sg_hMainMod = (HMODULE)hMain;
+		}
+
+		static bool ShouldSkipByModule()
+		{
+			if (!sg_bMainOnly || !sg_hMainMod) return false;
+			HMODULE hMod = NULL;
+			if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)_ReturnAddress(), &hMod))
+				return hMod != sg_hMainMod;
+			return false;
+		}
+
+		static int ApplyDpiScale(int nHeight)
+		{
+			if (sg_iDpiScalePct != 100 && nHeight != 0)
+				nHeight = MulDiv(nHeight, sg_iDpiScalePct, 100);
+			return nHeight;
+		}
+
+		// Dump requested/replaced statistics at shutdown (DLL_PROCESS_DETACH).
+		void DumpFontStats()
+		{
+			if (!sg_pfnLog || sg_mapReqCount.empty()) return;
+			sg_pfnLog(L"[FontStats] %u distinct requested face(s):", (unsigned)sg_mapReqCount.size());
+			for (const auto& kv : sg_mapReqCount)
+			{
+				bool bR = (sg_setReplReq.find(kv.first) != sg_setReplReq.end());
+				sg_pfnLog(L"[FontStats]   %ls  count=%u  replaced=%d", kv.first.c_str(), (unsigned)kv.second, (int)bR);
+			}
+		}
+
 		static const wchar_t* ResolveFontNameW(const wchar_t* wsRequested)
 		{
 			if (!wsRequested) return wsRequested;
+			if (ShouldSkipByModule()) return wsRequested;  // (tier-4) main-module filter
 
 			// 1) per-font map: exact match first, then first wildcard hit (definition order)
 			std::wstring wsReq = TrimW(wsRequested);
+			sg_mapReqCount[wsReq]++;  // (tier-4) stats
 			const std::wstring* pMapVal = NULL;
 
 			for (const auto& kv : sg_vFontMap) // pass 1: exact (non-wildcard) keys
@@ -180,13 +241,14 @@ namespace Rut
 				std::vector<std::wstring> vCand;
 				ParseCandidateList(*pMapVal, vCand);
 				tls_wsResultW = ResolveFirstInstalled(vCand);
-				if (!tls_wsResultW.empty()) return tls_wsResultW.c_str();
+				if (!tls_wsResultW.empty()) { sg_setReplReq.insert(wsReq); return tls_wsResultW.c_str(); }
 			}
 
 			// 2) global replacement
 			if (!sg_wsGlobalFontW.empty())
 			{
 				tls_wsResultW = sg_wsGlobalFontW;
+				sg_setReplReq.insert(wsReq);
 				return tls_wsResultW.c_str();
 			}
 
@@ -350,6 +412,7 @@ namespace Rut
 				if (sg_iFontWeight > 0)  cWeight = (INT)sg_iFontWeight;
 				if (sg_iFontItalic >= 0) bItalic = (DWORD)sg_iFontItalic;
 				if (sg_iFontSizeScale != 100) cHeight = MulDiv(cHeight, sg_iFontSizeScale, 100);
+				cHeight = ApplyDpiScale(cHeight);
 				if (sg_iMinFontSize > 0)
 				{
 					int nAbs = cHeight < 0 ? -cHeight : cHeight;
@@ -389,6 +452,7 @@ namespace Rut
 				if (sg_iFontWeight > 0)  cWeight = (INT)sg_iFontWeight;
 				if (sg_iFontItalic >= 0) bItalic = (DWORD)sg_iFontItalic;
 				if (sg_iFontSizeScale != 100) cHeight = MulDiv(cHeight, sg_iFontSizeScale, 100);
+				cHeight = ApplyDpiScale(cHeight);
 				if (sg_iMinFontSize > 0)
 				{
 					int nAbs = cHeight < 0 ? -cHeight : cHeight;
@@ -405,6 +469,47 @@ namespace Rut
 			return DetourAttachFunc(&rawCreateFontW, newCreateFontW);
 		}
 		//*********END Hook CreateFontW*********
+
+		//*********Start Hook SelectObject (tier-4 fallback)*********
+		// Engines that load fonts from resources (or bypass CreateFont) still end up
+		// selecting an HFONT into a DC; this catches those and substitutes a mapped
+		// font on the fly. Off by default (opt-in): it creates a replacement font once
+		// per original HFONT and caches it.
+		typedef HGDIOBJ (WINAPI *pSelectObject)(HDC, HGDIOBJ);
+		static pSelectObject rawSelectObject = SelectObject;
+
+		HGDIOBJ WINAPI newSelectObject(HDC hdc, HGDIOBJ hgdiobj)
+		{
+			if (!hgdiobj || GetObjectType(hgdiobj) != OBJ_FONT)
+				return rawSelectObject(hdc, hgdiobj);
+			HFONT hf = (HFONT)hgdiobj;
+			auto it = sg_mapSelReplaced.find(hf);
+			if (it != sg_mapSelReplaced.end())
+				return rawSelectObject(hdc, it->second);
+			LOGFONTW lf = { 0 };
+			if (GetObjectW(hf, sizeof(lf), &lf) != sizeof(lf))
+				return rawSelectObject(hdc, hgdiobj);
+			const wchar_t* wsFace = ResolveFontNameW(lf.lfFaceName);
+			if (!wsFace || wsFace == lf.lfFaceName || _wcsicmp(wsFace, lf.lfFaceName) == 0)
+				return rawSelectObject(hdc, hgdiobj);
+			LOGFONTW lfn = lf;
+			wcscpy_s(lfn.lfFaceName, LF_FACESIZE, wsFace);
+			if (!sg_bCharsetSpoof) lfn.lfCharSet = (BYTE)sg_dwCharSet;
+			if (sg_iFontHeightScale != 100) lfn.lfHeight = MulDiv(lfn.lfHeight, sg_iFontHeightScale, 100);
+			if (sg_iFontWidthScale != 100)  lfn.lfWidth  = MulDiv(lfn.lfWidth,  sg_iFontWidthScale, 100);
+			if (sg_iFontSizeScale != 100)   lfn.lfHeight = MulDiv(lfn.lfHeight, sg_iFontSizeScale, 100);
+			lfn.lfHeight = ApplyDpiScale(lfn.lfHeight);
+			HFONT hRep = CreateFontIndirectW(&lfn);
+			if (!hRep) return rawSelectObject(hdc, hgdiobj);
+			sg_mapSelReplaced[hf] = hRep;
+			return rawSelectObject(hdc, hRep);
+		}
+
+		bool HookSelectObject()
+		{
+			return DetourAttachFunc(&rawSelectObject, newSelectObject);
+		}
+		//*********END Hook SelectObject*********
 
 
 		//*********Start Hook CreateFontIndirectA*******
@@ -435,6 +540,7 @@ namespace Rut
 				if (sg_iFontWeight > 0) lf2.lfWeight = (LONG)sg_iFontWeight;
 				if (sg_iFontItalic >= 0) lf2.lfItalic = (BYTE)sg_iFontItalic;
 				if (sg_iFontSizeScale != 100) lf2.lfHeight = MulDiv(lf2.lfHeight, sg_iFontSizeScale, 100);
+				lf2.lfHeight = ApplyDpiScale(lf2.lfHeight);
 				if (sg_iMinFontSize > 0)
 				{
 					LONG nAbs = lf2.lfHeight < 0 ? -lf2.lfHeight : lf2.lfHeight;
@@ -475,6 +581,7 @@ namespace Rut
 				if (sg_iFontWeight > 0) lf2.lfWeight = (LONG)sg_iFontWeight;
 				if (sg_iFontItalic >= 0) lf2.lfItalic = (BYTE)sg_iFontItalic;
 				if (sg_iFontSizeScale != 100) lf2.lfHeight = MulDiv(lf2.lfHeight, sg_iFontSizeScale, 100);
+				lf2.lfHeight = ApplyDpiScale(lf2.lfHeight);
 				if (sg_iMinFontSize > 0)
 				{
 					LONG nAbs = lf2.lfHeight < 0 ? -lf2.lfHeight : lf2.lfHeight;
@@ -1147,7 +1254,22 @@ namespace Rut
 				{
 					if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
 					std::wstring wsFull = wsFontsDir + L"\\" + fd.cFileName;
-					if (AddFontResourceW(wsFull.c_str()) > 0) nInstalled++;
+					// Load the font from memory (per-process, no reliance on the file staying
+					// on disk) instead of the system-wide AddFontResourceW.
+					HANDLE hFile = CreateFileW(wsFull.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+					if (hFile != INVALID_HANDLE_VALUE)
+					{
+						DWORD dwSize = GetFileSize(hFile, NULL);
+						std::vector<BYTE> vec(dwSize ? dwSize : 1);
+						DWORD dwRead = 0;
+						if (dwSize && ReadFile(hFile, vec.data(), dwSize, &dwRead, NULL) && dwRead == dwSize)
+						{
+							DWORD nFonts = 0;
+							HANDLE hMem = AddFontMemResourceEx(vec.data(), dwRead, NULL, &nFonts);
+							if (hMem) { sg_vMemFontHandles.push_back(hMem); nInstalled += (int)nFonts; }
+						}
+						CloseHandle(hFile);
+					}
 				} while (FindNextFileW(hFind, &fd));
 				FindClose(hFind);
 			}

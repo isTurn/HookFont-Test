@@ -167,6 +167,20 @@ namespace Rut
 		void ConfigureControlText(bool bEnable);
 		bool HookControlText();
 
+		// (tier-4) DPI-aware size compensation: scale |lfHeight| by system DPI/96.
+		void ConfigureDpiScale(bool bAuto);
+
+		// (tier-4) Only replace fonts created by the game's main module (hMain, e.g.
+		// GetModuleHandle(NULL)); system DLLs / overlay fonts are left alone.
+		void ConfigureMainModuleFilter(bool bEnable, void* hMain);
+
+		// (tier-4) Dump requested/replaced font statistics via the log callback.
+		void DumpFontStats();
+
+		// (tier-4) SelectObject fallback: catch fonts loaded from resources that bypass
+		// the CreateFont hooks. Off by default.
+		bool HookSelectObject();
+
 		// Attach the ExtTextOutW/A hooks. Requires ConfigureCharMap() first.
 		bool HookTextOut();
 

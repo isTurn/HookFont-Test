@@ -55,6 +55,9 @@
 - **INI 编码自动识别**：UTF-8（含 BOM）、UTF-16（记事本"Unicode"）、ANSI/GBK 都能正确解析，存成哪种编码都不怕
 - **字体清单（-listfonts）**：`HookFont.exe -listfonts` 把系统全部可用字体名写到 `fonts_list.txt`，选字体照着填
 - **日志滚动 + 键名告警**：日志超 2MB 自动滚动成 `.old`；INI 里写错 / 不认的键会在日志打 `[Config] WARNING: unknown key ...`，不静默失效
+- **SelectObject 兜底**：引擎从资源直接加载字体、绕过 `CreateFont` 时，只要把字体选进 DC 就一并替换（`HookSelectObject = true`）
+- **未替换字体统计**：退出时日志打 `[FontStats]`，列出引擎请求过的每个字体及是否命中替换——一眼看清还有谁没被覆盖
+- **DPI 感知 + 模块白名单**：`DpiScaleAuto` 高 DPI 屏自动微调字号；`HookMainModuleOnly` 只换游戏主模块字体，系统/输入法/叠加层不动
 - **免配置环境**：配置按程序自身目录解析，不依赖当前工作目录；中文路径自动转 8.3 短路径
 - **延迟 Hook**：从工作线程延迟执行 Hook，规避加载器锁死锁风险
 - **日志排查**：运行日志落盘（`HookFont.log`），异常可追查，不弹窗卡游戏
