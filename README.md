@@ -58,6 +58,10 @@
 - **SelectObject 兜底**：引擎从资源直接加载字体、绕过 `CreateFont` 时，只要把字体选进 DC 就一并替换（`HookSelectObject = true`）
 - **未替换字体统计**：退出时日志打 `[FontStats]`，列出引擎请求过的每个字体及是否命中替换——一眼看清还有谁没被覆盖
 - **DPI 感知 + 模块白名单**：`DpiScaleAuto` 高 DPI 屏自动微调字号；`HookMainModuleOnly` 只换游戏主模块字体，系统/输入法/叠加层不动
+- **DirectWrite / GDI+ 文本替换**：`CreateTextLayout` 与 `GdipDrawString` 绘制的文本同样走 `[TextMap]`/`[CharMap]`/AutoSC
+- **ANSI 统一解码**：A 版字节流按 `CPRedirectFrom`（Shift-JIS 932）解码后走同一管线，双字节子串也能替换
+- **多 Profile**：`HookFont.exe -profile 雅黑` 选 `[HookFont:profile_雅黑]` 段，一套 INI 存多套字体配置一键切换
+- **崩溃隔离**：单个 Hook 挂载失败只在日志记 `[Hook] xxx failed`，不影响其余 Hook 与游戏
 - **免配置环境**：配置按程序自身目录解析，不依赖当前工作目录；中文路径自动转 8.3 短路径
 - **延迟 Hook**：从工作线程延迟执行 Hook，规避加载器锁死锁风险
 - **日志排查**：运行日志落盘（`HookFont.log`），异常可追查，不弹窗卡游戏

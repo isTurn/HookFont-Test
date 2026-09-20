@@ -1447,6 +1447,33 @@ namespace Rut
 
 		static thread_local std::string tls_sTextA;
 
+		// (tier-5) Unified ANSI path: decode the engine's byte stream via its code
+		// page (Shift-JIS 932 by default) to wide chars, run the SAME TextMap/CharMap/
+		// AutoSC pipeline, then re-encode. Lets substring [TextMap] work on double-byte
+		// text too, not just single-byte 0x00-0xFF.
+		static const char* MapCharsAUnified(const char* cpIn, size_t nLen, UINT* pOutLen)
+		{
+			*pOutLen = (UINT)nLen;
+			if (!cpIn || nLen == 0) return cpIn;
+			if (!sg_bTextMapEnabled && !sg_bCharMapEnabled && !sg_bAutoSC) return cpIn;
+			thread_local static std::wstring s_tlsW;
+			int wlen = MultiByteToWideChar(sg_dwCPSrc, 0, cpIn, (int)nLen, NULL, 0);
+			if (wlen <= 0) return cpIn;
+			s_tlsW.resize(wlen);
+			MultiByteToWideChar(sg_dwCPSrc, 0, cpIn, (int)nLen, &s_tlsW[0], wlen);
+			const wchar_t* mapped = MapCharsW(s_tlsW.c_str(), s_tlsW.size());
+			if (mapped == s_tlsW.c_str()) return cpIn;
+			UINT dst = sg_dwCPDst ? sg_dwCPDst : sg_dwCPSrc;
+			thread_local static std::string s_tlsS;
+			int rlen = WideCharToMultiByte(dst, 0, mapped, -1, NULL, 0, NULL, NULL);
+			if (rlen <= 1) return cpIn;
+			s_tlsS.resize(rlen);
+			WideCharToMultiByte(dst, 0, mapped, -1, &s_tlsS[0], rlen, NULL, NULL);
+			if (!s_tlsS.empty() && s_tlsS.back() == 0) s_tlsS.pop_back();
+			*pOutLen = (UINT)s_tlsS.size();
+			return s_tlsS.c_str();
+		}
+
 		static const char* MapCharsA(const char* cpIn, size_t nLen)
 		{
 			if (!sg_bCharMapEnabled || !cpIn || nLen == 0) return cpIn;
@@ -1552,10 +1579,11 @@ namespace Rut
 				++sg_iDiagTextLogs;
 				sg_pfnLog(L"[Diag] ExtTextOutA[%d]: \"%.32hs\"", sg_iDiagTextLogs, lpString);
 			}
-			const char* sMapped = MapCharsA(lpString, c);
+			UINT uNewLen = c;
+			const char* sMapped = MapCharsAUnified(lpString, c, &uNewLen);
 			if (sMapped != lpString && sg_pfnLog)
-				sg_pfnLog(L"[CharMap] ExtTextOutA: \"%hs\" -> \"%hs\"", lpString, sMapped);
-			return rawExtTextOutA(hdc, x, y, options, lprect, sMapped, c, lpDx);
+				sg_pfnLog(L"[CharMap] ExtTextOutA: mapped %u -> %u bytes", (unsigned)c, (unsigned)uNewLen);
+			return rawExtTextOutA(hdc, x, y, options, lprect, sMapped, uNewLen, lpDx);
 		}
 
 		bool HookExtTextOutA()

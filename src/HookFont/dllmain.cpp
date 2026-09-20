@@ -285,22 +285,28 @@ static void ApplyConfig(bool bFirst)
 
 	if (bFirst)
 	{
-		if (ReadIniKey(keys, L"HookCreateFontA", true))          HookCreateFontA();
-		if (ReadIniKey(keys, L"HookCreateFontIndirectA", true))  HookCreateFontIndirectA();
-		if (ReadIniKey(keys, L"HookCreateFontW", true))          HookCreateFontW();
-		if (ReadIniKey(keys, L"HookCreateFontIndirectW", true))  HookCreateFontIndirectW();
-		if (ReadIniKey(keys, L"HookDirectWrite", true))          HookDirectWrite();
-		if (ReadIniKey(keys, L"HookGdiplus", true))              HookGdiplus();
-		if (ReadIniKey(keys, L"HookTextOut", false))             HookTextOut();
-		if (ReadIniKey(keys, L"HookGlyphOutline", false))        HookGlyphOutline();
-		if (ReadIniKey(keys, L"HookDrawText", false))            HookDrawText();
-		if (bControlText)                                       HookControlText();
-		if (ReadIniKey(keys, L"HookSelectObject", false))      HookSelectObject();
-		if (iExtraScale != 100)                                  HookSetTextCharacterExtra();
-		if (iLineHeightScale != 100)                             HookGetTextMetrics();
-		if (dwCPRedirectTo)                                      HookCodePage();
-		if (bFaceSpoof)                                          HookFaceName();
-		if (bEnumSpoof)                                          HookEnumFontFamiliesExW();
+		// (tier-5) crash isolation: a failing hook must not take the rest down.
+		#define HOOK_SAFE(n_, expr_) do { try { expr_; } \
+			catch(const std::exception& e){ LogPrint(L"[Hook] %ls failed: %S", n_, e.what()); } \
+			catch(...){ LogPrint(L"[Hook] %ls failed (exception)", n_);} } while(0)
+		if (ReadIniKey(keys, L"HookCreateFontA", true))          HOOK_SAFE(L"CreateFontA", HookCreateFontA());
+		if (ReadIniKey(keys, L"HookCreateFontIndirectA", true))  HOOK_SAFE(L"CreateFontIndirectA", HookCreateFontIndirectA());
+		if (ReadIniKey(keys, L"HookCreateFontW", true))          HOOK_SAFE(L"CreateFontW", HookCreateFontW());
+		if (ReadIniKey(keys, L"HookCreateFontIndirectW", true))  HOOK_SAFE(L"CreateFontIndirectW", HookCreateFontIndirectW());
+		if (ReadIniKey(keys, L"HookDirectWrite", true))          HOOK_SAFE(L"DirectWrite", HookDirectWrite());
+		if (ReadIniKey(keys, L"HookGdiplus", true))              HOOK_SAFE(L"Gdiplus", HookGdiplus());
+		if (ReadIniKey(keys, L"HookTextOut", false))             HOOK_SAFE(L"TextOut", HookTextOut());
+		if (ReadIniKey(keys, L"HookGlyphOutline", false))        HOOK_SAFE(L"GlyphOutline", HookGlyphOutline());
+		if (ReadIniKey(keys, L"HookDrawText", false))            HOOK_SAFE(L"DrawText", HookDrawText());
+		if (bControlText)                                       HOOK_SAFE(L"ControlText", HookControlText());
+		if (ReadIniKey(keys, L"HookSelectObject", false))      HOOK_SAFE(L"SelectObject", HookSelectObject());
+		if (iExtraScale != 100)                                  HOOK_SAFE(L"TextCharExtra", HookSetTextCharacterExtra());
+		if (iLineHeightScale != 100)                             HOOK_SAFE(L"GetTextMetrics", HookGetTextMetrics());
+		if (dwCPRedirectTo)                                      HOOK_SAFE(L"CodePage", HookCodePage());
+		if (bFaceSpoof)                                          HOOK_SAFE(L"FaceName", HookFaceName());
+		if (bEnumSpoof)                                          HOOK_SAFE(L"EnumFontFamiliesExW", HookEnumFontFamiliesExW());
+
+		#undef HOOK_SAFE
 
 		// Optional: replace the game window title (common in translation patches).
 		if (ReadIniKey(keys, L"HookWindowTitle", false))

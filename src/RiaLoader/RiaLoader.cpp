@@ -112,6 +112,7 @@ struct CmdLine
 	bool         bListFonts = false;   // -listfonts: dump installed fonts, no launch
 	std::wstring wsExeOverride;   // command-line-specified game exe (may be relative)
 	std::wstring wsGameArgs;      // extra args passed through to the game
+	std::wstring wsProfile;       // -profile: named config section [HookFont:profile_*]
 };
 
 static CmdLine ParseCommandLine()
@@ -140,6 +141,10 @@ static CmdLine ParseCommandLine()
 		else if (arg == L"-listfonts" || arg == L"--listfonts" || arg == L"/listfonts")
 		{
 			cl.bListFonts = true;
+		}
+		else if (arg == L"-profile" || arg == L"--profile" || arg == L"/profile")
+		{
+			if (i + 1 < argc) cl.wsProfile = argv[++i];
 		}
 		else if (cl.wsExeOverride.empty())
 		{
@@ -406,6 +411,13 @@ INT APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
 		LogPrint(L"Working dir: %ls", wsTargetDir.c_str());
 		LogPrint(L"CmdLine: %ls", pCmdLine ? pCmdLine : L"(none)");
 		for (auto& sDll : vecDllAnsi) { LogPrint(L"  Inject: %hs", sDll.c_str()); }
+
+		// -profile: select [HookFont:profile_<name>] in the INI.
+		if (!cl.wsProfile.empty())
+		{
+			SetEnvironmentVariableW(L"HOOKFONT_PROFILE", cl.wsProfile.c_str());
+			LogPrint(L"Profile: %ls", cl.wsProfile.c_str());
+		}
 
 		// -diag: tell the injected DLL to run in diagnostic mode (log every font
 		// request, do NOT replace) via an env var inherited by the child process.

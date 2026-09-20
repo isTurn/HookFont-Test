@@ -164,7 +164,8 @@
      同一张映射表也会作用于 GetGlyphOutline（需另开 HookGlyphOutline = true），
      覆盖直接抓取字形位图的引擎。
 
-   [TextMap] 段（可选，作用于 ExtTextOut / DrawText / SetWindowText / DirectWrite / GDI+ 的宽文本）
+   [TextMap] 段（可选，作用于 ExtTextOut / DrawText / SetWindowText / DirectWrite / GDI+ 的宽文本；
+                 A 版字节流也会按 CPRedirectFrom 解码后走同一管线，Shift-JIS 双字节可子串替换）
      格式：源子串 = 目标子串（源和目标都可以是多个字符）
      与 [CharMap] 的区别：[CharMap] 逐字符一对一替换；[TextMap] 整段子串替换，
      适合把固定词组 / 错误译名整段改掉。多条命中时取源子串最长的那条（最长匹配），
@@ -226,3 +227,7 @@
 - 调字体/映射不想重启游戏：开 HotReload = true，改 INI 保存后自动生效。
 - 按钮/对话框文字要替换：开 HookSetWindowText = true（配合 [TextMap] / [CharMap]）。
 - 要把固定词组整段替换而不是逐字符：用 [TextMap] 段（最长匹配，多字符对多字符）。
+   启动器：
+     HookFont.exe <游戏.exe> [-diag] [-pid <PID>] [-listfonts] [-profile <名>]
+     -profile <名>   选用 INI 里的 [HookFont:profile_<名>] 段，一套 INI 存多套字体配置。
+     崩溃隔离：某个 Hook 挂载失败只在日志记 [Hook] xxx failed，不影响其余 Hook。
