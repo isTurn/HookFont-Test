@@ -1,8 +1,9 @@
-#include "INI.h"
+﻿#include "INI.h"
 #include "Str.h"
 #include "File.h"
 
 #include <sstream>
+#include <vector>
 
 
 namespace Rcf
@@ -22,14 +23,64 @@ namespace Rcf
 			Parse(wsINI);
 		}
 
+		// Decode a raw byte buffer to wide text. cp == 0xFFFF means raw UTF-16LE
+		// (already native endianness on Windows); everything else goes through
+		// MultiByteToWideChar.
+		static std::wstring DecodeBuffer(const BYTE* p, DWORD n, UINT cp)
+		{
+			if (cp == 0xFFFF)
+			{
+				return std::wstring(reinterpret_cast<const wchar_t*>(p), n / 2);
+			}
+			int cch = MultiByteToWideChar(cp, 0, reinterpret_cast<LPCSTR>(p), (int)n, NULL, 0);
+			if (cch <= 0) return std::wstring();
+			std::wstring wsOut(cch, L'\0');
+			MultiByteToWideChar(cp, 0, reinterpret_cast<LPCSTR>(p), (int)n, &wsOut[0], cch);
+			return wsOut;
+		}
+
+		// Read an INI file tolerantly: UTF-8 with or without BOM (the normal case),
+		// UTF-16LE with BOM, or ANSI/GBK when the bytes are not valid UTF-8 — so a
+		// config saved by Notepad as "ANSI" or "Unicode" still parses instead of
+		// producing mojibake keys that silently match nothing.
+		static std::wstring ReadFileSmart(const std::wstring& wsPath)
+		{
+			HANDLE hFile = CreateFileW(wsPath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+			if (hFile == INVALID_HANDLE_VALUE) return std::wstring();
+
+			DWORD dwSize = GetFileSize(hFile, NULL);
+			std::vector<BYTE> vec(dwSize ? dwSize : 1);
+			DWORD dwRead = 0;
+			BOOL bOk = ReadFile(hFile, vec.data(), dwSize, &dwRead, NULL);
+			CloseHandle(hFile);
+			if (!bOk || dwRead == 0) return std::wstring();
+
+			const BYTE* p = vec.data();
+			DWORD n = dwRead;
+
+			if (n >= 3 && p[0] == 0xEF && p[1] == 0xBB && p[2] == 0xBF) return DecodeBuffer(p + 3, n - 3, CP_UTF8);
+			if (n >= 2 && p[0] == 0xFF && p[1] == 0xFE)              return DecodeBuffer(p + 2, n - 2, 0xFFFF); // UTF-16LE
+			if (n >= 2 && p[0] == 0xFE && p[1] == 0xFF)              return std::wstring(); // UTF-16BE: too rare, skip
+
+			// No BOM: strict UTF-8 check first (ASCII-only files are valid UTF-8 too),
+			// then fall back to the ANSI code page (GBK on Chinese Windows).
+			if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, reinterpret_cast<LPCSTR>(p), (int)n, NULL, 0) > 0)
+				return DecodeBuffer(p, n, CP_UTF8);
+			return DecodeBuffer(p, n, CP_ACP);
+		}
+
 		void INI_File::Parse(const std::wstring& wsINI)
 		{
-			std::wifstream wifs_ini = OpenFileUTF8Stream(wsINI);
+			std::wistringstream wiss(ReadFileSmart(wsINI));
 
 			std::size_t pos = std::wstring::npos;
 			std::wstring node_name;
-			for (std::wstring line; std::getline(wifs_ini, line);)
+			for (std::wstring line; std::getline(wiss, line);)
 			{
+				// Manual byte reading bypasses the text-stream CRLF->LF translation, so a
+				// CRLF file leaves a trailing '\r' on every line. Strip it so blank lines
+				// (and every key/value line) parse like they did through wifstream.
+				if (!line.empty() && line.back() == L'\r') line.pop_back();
 				if (line.empty()) { continue; }
 
 				switch (line[0])

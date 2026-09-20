@@ -50,6 +50,11 @@
 - **多配置段**：`[HookFont:游戏.exe]` 覆盖段——一份 INI 管理多个游戏，该进程启动时用覆盖段键值顶替 `[HookFont]` 全局段（只覆盖写了的键）
 - **热重载（HotReload）**：运行时每秒检查 INI 修改时间，变化自动重新加载（字体名 / [FontMap] / [CharMap] / 缩放 / 伪装等即时生效），调配置不用重启游戏；Hook 开关类改动仍需重启
 - **诊断模式（-diag / Diagnostic=true）**：只记录不替换——每次字体创建请求（字体名 / 字符集 / 字号 / 质量）与文本绘制写进日志，定位"为什么字体没换过来"；排查完关闭
+- **文本子串替换（[TextMap]）**：与逐字符的 `[CharMap]` 互补，整段子串替换（多字符对多字符），最长匹配不递归——把固定词组 / 错误译名整段改掉
+- **控件文本替换（HookSetWindowText）**：`SetWindowTextA/W` 设置的按钮、对话框、状态栏文本也走 `[TextMap]` / `[CharMap]` / `AutoSC`，与窗口标题替换互不冲突
+- **INI 编码自动识别**：UTF-8（含 BOM）、UTF-16（记事本"Unicode"）、ANSI/GBK 都能正确解析，存成哪种编码都不怕
+- **字体清单（-listfonts）**：`HookFont.exe -listfonts` 把系统全部可用字体名写到 `fonts_list.txt`，选字体照着填
+- **日志滚动 + 键名告警**：日志超 2MB 自动滚动成 `.old`；INI 里写错 / 不认的键会在日志打 `[Config] WARNING: unknown key ...`，不静默失效
 - **免配置环境**：配置按程序自身目录解析，不依赖当前工作目录；中文路径自动转 8.3 短路径
 - **延迟 Hook**：从工作线程延迟执行 Hook，规避加载器锁死锁风险
 - **日志排查**：运行日志落盘（`HookFont.log`），异常可追查，不弹窗卡游戏
@@ -143,6 +148,7 @@ HookTextOut = false        ; 字符级替换开关（配合下方 [CharMap]）
 HookGlyphOutline = false   ; 字形级替换开关（同样走 [CharMap]，老 DirectX 引擎兜底）
 AutoSC = false             ; 繁简自动映射（ExtTextOutW 文本先繁→简再应用 [CharMap]）
 HookDrawText = false       ; DrawTextA/W 也走 [CharMap]/AutoSC（按钮/静态文本场景）
+HookSetWindowText = false  ; SetWindowTextA/W 也走 [TextMap]/[CharMap]/AutoSC（控件文本）
 FaceNameSpoof = false      ; 字体名伪装：GetTextFace/GetObject 返回引擎请求的原始名字
 EnumFontSpoof = false      ; 枚举伪装：[FontMap] 精确命中的字体即使没装也向引擎伪造"存在"
 Diagnostic = false         ; 诊断模式：只记录不替换（也可用启动器 -diag 开启）
@@ -160,6 +166,10 @@ MS* = 黑体        ; 通配符：所有 MS 开头的字体都换成黑体
 「 = “            ; 日文全角左引号 → 中文左引号（逐字符替换，用于 ExtTextOut/TextOut 文本）
 」 = ”
 あ = 阿           ; 字形近似的假名 → 汉字
+
+; [TextMap] 子串替换（可选，多字符对多字符，最长匹配，不递归）
+; [TextMap]
+; あいう = 阿衣乌
 ```
 
 > 详细部署与排查说明见 [USAGE.txt](USAGE.txt)。

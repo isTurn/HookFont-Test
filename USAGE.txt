@@ -66,6 +66,9 @@
 	                              创建流程、再被 Hook 换成目标字体。
 	       HookDrawText   = false  DrawTextA/W 也走 [CharMap]/AutoSC（按钮、静态文本
 	                              用 DrawText 绘制的引擎；与 HookTextOut 独立）。
+	       HookSetWindowText = false  SetWindowTextA/W 也走 [TextMap]/[CharMap]/AutoSC
+	                              （按钮、对话框、状态栏等用 SetWindowText 设置的文本；
+	                              与 HookWindowTitle 互不冲突，标题规则优先）。
 	       Diagnostic     = false  诊断模式：只记录、不替换——每次字体创建请求（字体名 /
 	                              字符集 / 字号 / 质量）与一段文本绘制写进日志，用于排查
 	                              "为什么字体没换过来"。也可用启动器 -diag 开启（等价）。
@@ -155,6 +158,15 @@
      同一张映射表也会作用于 GetGlyphOutline（需另开 HookGlyphOutline = true），
      覆盖直接抓取字形位图的引擎。
 
+   [TextMap] 段（可选，作用于 ExtTextOut / DrawText / SetWindowText 的宽文本）
+     格式：源子串 = 目标子串（源和目标都可以是多个字符）
+     与 [CharMap] 的区别：[CharMap] 逐字符一对一替换；[TextMap] 整段子串替换，
+     适合把固定词组 / 错误译名整段改掉。多条命中时取源子串最长的那条（最长匹配），
+     不递归替换。执行顺序：[TextMap] -> AutoSC -> [CharMap]。
+     例：
+       [TextMap]
+       あいう = 阿衣乌
+
 3. 双击 HookFont.exe 启动游戏。
 
    高级用法（命令行）：
@@ -166,12 +178,21 @@
         HookFont.exe -pid <进程ID>
       进程必须是 32 位（x86 版）或 64 位（x64 版），与所用 HookFont.exe 位数一致。
       常见用途：游戏启动器再拉起游戏本体、或需要先进入主菜单后再挂补丁。
+   3) 列出系统全部可用字体：
+        HookFont.exe -listfonts
+      把系统所有 GDI 可见字体名写到同目录 fonts_list.txt，选 FontName / [FontMap]
+      时照着填，避免猜错字体名拼写。
 
 二、故障排查
 - 运行后同目录会生成日志：HookFont.log（字体 Hook 是否初始化成功）、
   HookFont 同名的 .log（启动器日志，记录启动与注入情况）。
 - 若游戏没有反应，先看这两个日志。
 - 游戏目录含中文等特殊字符路径时程序会自动处理，一般无需担心。
+- INI 编码自动识别：UTF-8（含 BOM）、UTF-16（记事本"Unicode"）、ANSI/GBK
+  （记事本"ANSI"）都能正确解析，不用纠结存成哪种编码。
+- 日志滚动：HookFont.log 超过 2MB 自动改名为 HookFont.log.old 并新建，不撑爆磁盘。
+- 键名校验：[HookFont] 段里写错 / 不认的键会在日志里打
+  "[Config] WARNING: unknown key ..."，不会静默失效，看到就检查拼写。
 
 多配置段（可选）：一份 INI 管理多个游戏
 - 段名写作 [HookFont:进程文件名]（含 .exe），该进程启动时用这一段里的键覆盖
@@ -197,3 +218,5 @@
 - 引擎"明明装了字体却不用"（先枚举确认存在才创建）：开 EnumFontSpoof = true。
 - 引擎校验字体名、发现被换就反复重建 / 拒绝使用：开 FaceNameSpoof = true。
 - 调字体/映射不想重启游戏：开 HotReload = true，改 INI 保存后自动生效。
+- 按钮/对话框文字要替换：开 HookSetWindowText = true（配合 [TextMap] / [CharMap]）。
+- 要把固定词组整段替换而不是逐字符：用 [TextMap] 段（最长匹配，多字符对多字符）。

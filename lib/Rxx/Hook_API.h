@@ -16,6 +16,11 @@ namespace Rut
 		// Keys may contain '*' / '?' wildcards for fuzzy matching.
 		typedef std::vector<std::pair<std::wstring, std::wstring>> FontMapListT;
 
+		// Ordered substring-replacement table ([TextMap] section): source substring ->
+		// replacement text, longest keys applied first. Applied to wide text drawn via
+		// ExtTextOutW / DrawTextW / SetWindowTextW before [CharMap]/AutoSC.
+		typedef std::vector<std::pair<std::wstring, std::wstring>> TextMapListT;
+
 		// Configure the shared font-replacement state. Call before the Hook* functions.
 		//   uiCharSet      : charset forced onto GDI font creations (0x86 = GB2312,
 		//                    0x81 = Japanese, 1 = DEFAULT_CHARSET). Applied together with
@@ -147,6 +152,20 @@ namespace Rut
 
 		// Configure the character replacement table. Call before HookTextOut().
 		void ConfigureCharMap(const CharMapT& mpChars);
+
+		// Substring replacement table: every occurrence of each source substring in
+		// wide text is replaced (longest keys first, no re-scan of inserted text).
+		// Applied inside MapCharsW, so it covers ExtTextOutW / DrawTextW and the
+		// control-text path. Off when the table is empty.
+		void ConfigureTextMap(const TextMapListT& vTextMap);
+
+		// Control-text replacement: when enabled, SetWindowTextA/W text that does not
+		// match the title rule is also mapped through [TextMap]/[CharMap]/AutoSC —
+		// covers static controls and buttons in engines that use controls instead of
+		// owner-drawn text. Independent of HookTitleWindow (which has priority when
+		// the text matches the raw title).
+		void ConfigureControlText(bool bEnable);
+		bool HookControlText();
 
 		// Attach the ExtTextOutW/A hooks. Requires ConfigureCharMap() first.
 		bool HookTextOut();

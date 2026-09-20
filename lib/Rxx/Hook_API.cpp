@@ -903,6 +903,14 @@ namespace Rut
 		}
 		//=====================================================================
 
+		// Control-text mapping state + forward declarations. The mapping helpers live
+		// in the character-mapping section further below; the SetWindowText hooks in
+		// this section only call them through these declarations.
+		static bool                                 sg_bControlText = false;   // SetWindowText mapping
+		static bool                                 sg_bControlTextHooked = false;
+		static const wchar_t* MapCharsW(const wchar_t* wsIn, size_t nLen);
+		static const char*   MapCharsA(const char* cpIn, size_t nLen);
+
 		//*********Start Hook Title Window (CreateWindowExA/W + SetWindowTextA/W)*******
 		static std::wstring sg_wsNewTitle;
 		static std::wstring sg_wsRawTitle;
@@ -946,12 +954,29 @@ namespace Rut
 				tls_sTitleNewA = StrX::WStrToStr(sg_wsNewTitle, CP_ACP);
 				lpString = tls_sTitleNewA.c_str();
 			}
+			else if (sg_bControlText && lpString)
+			{
+				const char* sMapped = MapCharsA(lpString, strlen(lpString));
+				if (sMapped != lpString && sg_pfnLog)
+					sg_pfnLog(L"[CharMap] SetWindowTextA: \"%hs\" -> \"%hs\"", lpString, sMapped);
+				lpString = sMapped;
+			}
 			return RawSetWindowTextA(hWnd, lpString);
 		}
 
 		BOOL WINAPI NewSetWindowTextW(HWND hWnd, LPCWSTR lpString)
 		{
-			if (TitleMatchesW(lpString)) lpString = sg_wsNewTitle.c_str();
+			if (TitleMatchesW(lpString))
+			{
+				lpString = sg_wsNewTitle.c_str();
+			}
+			else if (sg_bControlText && lpString)
+			{
+				const wchar_t* wsMapped = MapCharsW(lpString, wcslen(lpString));
+				if (wsMapped != lpString && sg_pfnLog)
+					sg_pfnLog(L"[CharMap] SetWindowTextW: \"%ls\" -> \"%ls\"", lpString, wsMapped);
+				lpString = wsMapped;
+			}
 			return RawSetWindowTextW(hWnd, lpString);
 		}
 
@@ -965,8 +990,11 @@ namespace Rut
 			bool ok = true;
 			ok = DetourAttachFunc(&RawCreateWindowExA, NewCreateWindowExA) && ok;
 			ok = DetourAttachFunc(&RawCreateWindowExW, NewCreateWindowExW) && ok;
-			ok = DetourAttachFunc(&RawSetWindowTextA, NewSetWindowTextA) && ok;
-			ok = DetourAttachFunc(&RawSetWindowTextW, NewSetWindowTextW) && ok;
+			// SetWindowText may already be hooked by HookControlText(); a second
+			// attach simply fails without harming the existing trampoline.
+			DetourAttachFunc(&RawSetWindowTextA, NewSetWindowTextA);
+			DetourAttachFunc(&RawSetWindowTextW, NewSetWindowTextW);
+			sg_bControlTextHooked = true;
 			return ok;
 		}
 
@@ -976,7 +1004,22 @@ namespace Rut
 			tls_wsResultW = StrX::StrToWStr(cpPatchTitle ? cpPatchTitle : "", CP_ACP);
 			return HookTitleWindow(tls_wsTemp.c_str(), tls_wsResultW.c_str());
 		}
-		//*********END Hook Title Window*******
+		void ConfigureControlText(bool bEnable)
+		{
+			sg_bControlText = bEnable;
+		}
+
+		bool HookControlText()
+		{
+			if (!sg_bControlText) return true;
+			if (sg_bControlTextHooked) return true;
+			bool ok = true;
+			ok = DetourAttachFunc(&RawSetWindowTextA, NewSetWindowTextA) && ok;
+			ok = DetourAttachFunc(&RawSetWindowTextW, NewSetWindowTextW) && ok;
+			sg_bControlTextHooked = ok;
+			return ok;
+		}
+		//*********END Hook Title Window*********
 
 
 		//=====================================================================
@@ -1124,6 +1167,8 @@ namespace Rut
 		static std::unordered_map<char, char>       sg_mpCharMapA; // byte  -> byte (ExtTextOutA, values <= 0xFF)
 		static bool                                 sg_bCharMapEnabled = false;
 		static bool                                 sg_bAutoSC = false;   // traditional -> simplified (ExtTextOutW)
+		static TextMapListT                         sg_vTextMap;          // [TextMap] substring table
+		static bool                                 sg_bTextMapEnabled = false;
 
 		void SetLogCallback(LogCallback pfn)
 		{
@@ -1143,6 +1188,34 @@ namespace Rut
 		void ConfigureAutoSC(bool bEnable)
 		{
 			sg_bAutoSC = bEnable;
+		}
+
+		void ConfigureTextMap(const TextMapListT& vTextMap)
+		{
+			sg_vTextMap = vTextMap;
+			// longest source keys first -> deterministic longest-match behaviour
+			std::sort(sg_vTextMap.begin(), sg_vTextMap.end(),
+				[](const TextMapListT::value_type& a, const TextMapListT::value_type& b)
+				{ return a.first.size() > b.first.size(); });
+			sg_bTextMapEnabled = !sg_vTextMap.empty();
+		}
+
+		// Replace every occurrence of each source substring (no re-scan of the text
+		// inserted by an earlier rule, so rules cannot loop into each other).
+		static void ApplyTextMapW(std::wstring& ws)
+		{
+			for (const auto& kv : sg_vTextMap)
+			{
+				if (kv.first.empty()) continue;
+				size_t pos = 0;
+				for (;;)
+				{
+					pos = ws.find(kv.first, pos);
+					if (pos == std::wstring::npos) break;
+					ws.replace(pos, kv.first.size(), kv.second);
+					pos += kv.second.size();
+				}
+			}
 		}
 
 		void ConfigureCharMap(const CharMapT& mpChars)
@@ -1169,8 +1242,10 @@ namespace Rut
 		{
 			if (!wsIn || nLen == 0) return wsIn;
 
-			// fast path: nothing to do -> hand back the original pointer
-			if (sg_bCharMapEnabled || sg_bAutoSC)
+			// fast path: no rule that could fire -> hand back the original pointer
+			if (!sg_bTextMapEnabled && !sg_bCharMapEnabled && !sg_bAutoSC) return wsIn;
+
+			if (!sg_bTextMapEnabled)
 			{
 				size_t i = 0;
 				for (; i < nLen; ++i)
@@ -1181,11 +1256,17 @@ namespace Rut
 				}
 				if (i == nLen) return wsIn;
 			}
-			else return wsIn;
 
 			tls_wsTextW.assign(wsIn, nLen);
+			if (sg_bTextMapEnabled)
+			{
+				std::wstring wsBefore = tls_wsTextW;
+				ApplyTextMapW(tls_wsTextW);
+				if (wsBefore != tls_wsTextW && sg_pfnLog)
+					sg_pfnLog(L"[TextMap] \"%ls\" -> \"%ls\"", wsBefore.c_str(), tls_wsTextW.c_str());
+			}
 			size_t nSC = 0;
-			for (size_t i = 0; i < nLen; ++i)
+			for (size_t i = 0; i < tls_wsTextW.size(); ++i)
 			{
 				wchar_t c = tls_wsTextW[i];
 				if (sg_bAutoSC)

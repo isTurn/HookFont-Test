@@ -401,6 +401,58 @@ static void TestDrawText(const char* tag)
 }
 
 
+// [TextMap] substring replacement: draw a wide string that contains a configured
+// source substring ("あいう" -> "阿衣乌" in the test INI) via ExtTextOutW. The
+// rewrite itself is verified from the hook diagnostics (HookFont.log
+// "[TextMap] ExtTextOutW: ... -> ..."); here we only prove the call succeeds.
+static void TestTextMap(const char* tag)
+{
+    HDC hdc = CreateCompatibleDC(NULL);
+    if (!hdc) { WriteResult(tag, 0, L"DC_FAIL"); return; }
+
+    HFONT hf = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                           DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"MS Gothic");
+    HGDIOBJ hOld = SelectObject(hdc, hf);
+
+    const wchar_t* wsText = L"测试文本：あいう";
+    BOOL bOk = ExtTextOutW(hdc, 0, 0, 0, NULL, wsText, (UINT)wcslen(wsText), NULL);
+
+    SelectObject(hdc, hOld);
+    DeleteObject(hf);
+    DeleteDC(hdc);
+
+    wchar_t buf[64];
+    swprintf_s(buf, 64, L"ret=%d", bOk ? 1 : 0);
+    WriteResult(tag, (BYTE)(bOk ? 1 : 0), buf);
+}
+
+
+// Control-text replacement: SetWindowTextW on a plain control window whose text
+// is NOT the raw title. With HookSetWindowText=true the DLL maps 「あ」 via
+// [CharMap] ("阿"), and GetWindowTextW reads the mapped text back so we can
+// verify the rewrite end-to-end (no log spelunking needed).
+static void TestSetWindowTextMap(const char* tag)
+{
+    WNDCLASSW wc = { 0 };
+    wc.lpfnWndProc = DefWindowProcW;
+    wc.hInstance = GetModuleHandleW(NULL);
+    wc.lpszClassName = L"HFTestCls2";
+    RegisterClassW(&wc);
+
+    HWND hwnd = CreateWindowExW(0, L"HFTestCls2", L"whatever", 0, 0, 0, 0, 0, NULL, NULL, wc.hInstance, NULL);
+    if (!hwnd) { WriteResult(tag, 0, L"WND_FAIL"); return; }
+
+    SetWindowTextW(hwnd, L"控件「あ」");
+
+    wchar_t buf[64] = { 0 };
+    GetWindowTextW(hwnd, buf, 64);
+    WriteResult(tag, (BYTE)(wcscmp(buf, L"控件“阿”") == 0), buf);
+
+    DestroyWindow(hwnd);
+}
+
+
 // Font-enumeration spoof: ask EnumFontFamiliesExW for "MissingFont" (a FontMap
 // key that is NOT installed). With EnumFontSpoof=true the hook fakes a hit, so
 // the callback fires once; with it off the callback never sees the face.
@@ -576,6 +628,8 @@ int main()
     TestCodePage("CodePage");
     TestFaceSpoof("FaceSpoof");
     TestDrawText("DrawText");
+    TestTextMap("TextMap");
+    TestSetWindowTextMap("SetWinText");
     TestEnumFont("EnumFont");
 
     return 0;

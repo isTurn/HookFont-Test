@@ -32,9 +32,30 @@ static void LogInit(HMODULE hModule)
 	g_wsIniPath = PathRemoveExtension(std::wstring(wsPath)) + L".ini";
 }
 
+// Roll the log file once it exceeds 2 MB (long-lived games write a lot of
+// diagnostic lines): rename to <log>.old and start fresh, so the disk never
+// fills up unnoticed.
+static void RollLogIfNeeded()
+{
+	const ULONGLONG kMaxLogSize = 2ull * 1024ull * 1024ull;
+	WIN32_FILE_ATTRIBUTE_DATA fad = { 0 };
+	if (GetFileAttributesExW(g_wsLogPath.c_str(), GetFileExInfoStandard, &fad))
+	{
+		ULONGLONG ullSize = ((ULONGLONG)fad.nFileSizeHigh << 32) | fad.nFileSizeLow;
+		if (ullSize >= kMaxLogSize)
+		{
+			std::wstring wsOld = g_wsLogPath + L".old";
+			DeleteFileW(wsOld.c_str());
+			MoveFileW(g_wsLogPath.c_str(), wsOld.c_str());
+		}
+	}
+}
+
 static void LogPrint(const wchar_t* wsFmt, ...)
 {
 	if (g_wsLogPath.empty()) return;
+
+	RollLogIfNeeded();
 
 	SYSTEMTIME st = { 0 };
 	GetLocalTime(&st);
@@ -112,6 +133,33 @@ static void ApplyConfig(bool bFirst)
 	}
 
 	g_bHotReload = ReadIniKey(keys, L"HotReload", false);
+
+	// Warn about unknown [HookFont] keys: a misspelled key silently does
+	// nothing, and the log line makes "why didn't it apply?" instantly clear.
+	if (bFirst)
+	{
+		static const wchar_t* const kKnownKeys[] = {
+			L"Charset", L"CharsetSpoof", L"FontName",
+			L"FontHeightScale", L"FontWidthScale", L"FontWeight", L"FontItalic", L"FontExtraScale",
+			L"FontQuality", L"FontSizeScale", L"MinFontSize", L"LineHeightScale",
+			L"CPRedirectFrom", L"CPRedirectCodePage",
+			L"HookCreateFontA", L"HookCreateFontIndirectA", L"HookCreateFontW", L"HookCreateFontIndirectW",
+			L"HookDirectWrite", L"HookGdiplus", L"AutoInstallFonts",
+			L"HookWindowTitle", L"RawWindowTitle", L"NewWindowTitle",
+			L"HookTextOut", L"HookGlyphOutline", L"HookDrawText", L"HookSetWindowText",
+			L"AutoSC", L"FaceNameSpoof", L"EnumFontSpoof", L"Diagnostic", L"HotReload",
+		};
+		for (const auto& kv : ini.GetOrdered(L"HookFont"))
+		{
+			bool bKnown = false;
+			for (const wchar_t* pk : kKnownKeys)
+			{
+				if (kv.first == pk) { bKnown = true; break; }
+			}
+			if (!bKnown)
+				LogPrint(L"[Config] WARNING: unknown key \"%ls\" in [HookFont] (ignored)", kv.first.c_str());
+		}
+	}
 
 	uint32_t     uiCharSet  = ReadIniKey(keys, L"Charset", (uint32_t)0x86);
 	std::wstring wsFontName = ReadIniKey(keys, L"FontName", std::wstring(L"黑体"));
@@ -213,10 +261,22 @@ static void ApplyConfig(bool bFirst)
 	}
 	ConfigureCharMap(mpChars);
 
+	// [TextMap] section: source substring -> replacement text, applied to wide
+	// text (ExtTextOutW / DrawTextW / SetWindowTextW) before [CharMap]/AutoSC.
+	TextMapListT vTextMap;
+	for (auto& kv : ini.GetOrdered(L"TextMap"))
+		vTextMap.emplace_back(kv.first, static_cast<std::wstring>(kv.second));
+	ConfigureTextMap(vTextMap);
+
 	// Auto traditional -> simplified mapping (applied on ExtTextOutW text before
 	// [CharMap]; needs HookTextOut = true below).
 	bool bAutoSC = ReadIniKey(keys, L"AutoSC", false);
 	ConfigureAutoSC(bAutoSC);
+
+	// Control-text replacement: SetWindowTextA/W text also runs through the
+	// mapping tables (independent of the title rule; title rule wins on match).
+	bool bControlText = ReadIniKey(keys, L"HookSetWindowText", false);
+	ConfigureControlText(bControlText);
 
 	if (bFirst)
 	{
@@ -229,6 +289,7 @@ static void ApplyConfig(bool bFirst)
 		if (ReadIniKey(keys, L"HookTextOut", false))             HookTextOut();
 		if (ReadIniKey(keys, L"HookGlyphOutline", false))        HookGlyphOutline();
 		if (ReadIniKey(keys, L"HookDrawText", false))            HookDrawText();
+		if (bControlText)                                       HookControlText();
 		if (iExtraScale != 100)                                  HookSetTextCharacterExtra();
 		if (iLineHeightScale != 100)                             HookGetTextMetrics();
 		if (dwCPRedirectTo)                                      HookCodePage();
@@ -246,11 +307,11 @@ static void ApplyConfig(bool bFirst)
 			}
 		}
 
-		LogPrint(L"HookFont initialized. Charset=0x%02X Font=%ls FontMap=%d CharMap=%d Spoof=%d AutoSC=%d CP=%u HotReload=%d", uiCharSet, wsFontName.c_str(), (int)vFontMap.size(), (int)mpChars.size(), (int)bCharsetSpoof, (int)bAutoSC, dwCPRedirectTo, (int)g_bHotReload);
+		LogPrint(L"HookFont initialized. Charset=0x%02X Font=%ls FontMap=%d CharMap=%d TextMap=%d Spoof=%d AutoSC=%d CtrlText=%d CP=%u HotReload=%d", uiCharSet, wsFontName.c_str(), (int)vFontMap.size(), (int)mpChars.size(), (int)vTextMap.size(), (int)bCharsetSpoof, (int)bAutoSC, (int)bControlText, dwCPRedirectTo, (int)g_bHotReload);
 	}
 	else
 	{
-		LogPrint(L"[HotReload] config reloaded (Font=%ls FontMap=%d CharMap=%d Spoof=%d AutoSC=%d CP=%u)", wsFontName.c_str(), (int)vFontMap.size(), (int)mpChars.size(), (int)bCharsetSpoof, (int)bAutoSC, dwCPRedirectTo);
+		LogPrint(L"[HotReload] config reloaded (Font=%ls FontMap=%d CharMap=%d TextMap=%d Spoof=%d AutoSC=%d CP=%u)", wsFontName.c_str(), (int)vFontMap.size(), (int)mpChars.size(), (int)vTextMap.size(), (int)bCharsetSpoof, (int)bAutoSC, dwCPRedirectTo);
 	}
 }
 

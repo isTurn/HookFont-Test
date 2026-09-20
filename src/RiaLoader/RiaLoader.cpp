@@ -1,9 +1,10 @@
-#include <Windows.h>
+﻿#include <Windows.h>
 
 #include <cstdarg>
 #include <exception>
 #include <string>
 #include <vector>
+#include <set>
 
 #include "../../lib/Rxx/File.h"
 #include "../../lib/Rxx/Str.h"
@@ -18,9 +19,29 @@ using namespace Rut::StrX;
 static std::wstring g_wsLogPath;
 
 
+// Roll the log file once it exceeds 2 MB (long-running games keep the
+// launcher process alive; keep the disk from filling up silently).
+static void RollLogIfNeeded()
+{
+	const ULONGLONG kMaxLogSize = 2ull * 1024ull * 1024ull;
+	WIN32_FILE_ATTRIBUTE_DATA fad = { 0 };
+	if (GetFileAttributesExW(g_wsLogPath.c_str(), GetFileExInfoStandard, &fad))
+	{
+		ULONGLONG ullSize = ((ULONGLONG)fad.nFileSizeHigh << 32) | fad.nFileSizeLow;
+		if (ullSize >= kMaxLogSize)
+		{
+			std::wstring wsOld = g_wsLogPath + L".old";
+			DeleteFileW(wsOld.c_str());
+			MoveFileW(g_wsLogPath.c_str(), wsOld.c_str());
+		}
+	}
+}
+
 static void LogPrint(const wchar_t* wsFmt, ...)
 {
 	if (g_wsLogPath.empty()) return;
+
+	RollLogIfNeeded();
 
 	SYSTEMTIME st = { 0 };
 	GetLocalTime(&st);
@@ -88,6 +109,7 @@ struct CmdLine
 	bool         bInjectPid = false;
 	DWORD        dwPid = 0;
 	bool         bDiag = false;        // -diag: set HOOKFONT_DIAG=1 for the DLL
+	bool         bListFonts = false;   // -listfonts: dump installed fonts, no launch
 	std::wstring wsExeOverride;   // command-line-specified game exe (may be relative)
 	std::wstring wsGameArgs;      // extra args passed through to the game
 };
@@ -114,6 +136,10 @@ static CmdLine ParseCommandLine()
 		else if (arg == L"-diag" || arg == L"--diag" || arg == L"/diag")
 		{
 			cl.bDiag = true;
+		}
+		else if (arg == L"-listfonts" || arg == L"--listfonts" || arg == L"/listfonts")
+		{
+			cl.bListFonts = true;
 		}
 		else if (cl.wsExeOverride.empty())
 		{
@@ -195,6 +221,44 @@ static bool InjectDllIntoProcess(HANDLE hProcess, const std::wstring& wsDllPath,
 }
 
 
+// ============================================================================
+// -listfonts: enumerate every face GDI knows about (system fonts + fonts\
+// auto-registered by the DLL are both visible) and write them to
+// fonts_list.txt next to this exe, so choosing a FontName / [FontMap] value
+// does not require guessing the exact spelling. No game is launched.
+// ============================================================================
+static int CALLBACK ListFontsEnumProc(const LOGFONTW* lplf, const TEXTMETRICW*, DWORD, LPARAM lpData)
+{
+	if (lplf->lfFaceName[0])
+		reinterpret_cast<std::set<std::wstring>*>(lpData)->insert(lplf->lfFaceName);
+	return 1;
+}
+
+static int ListFontsToFile(const std::wstring& wsExeDir)
+{
+	std::set<std::wstring> setFaces;
+	HDC hdc = CreateDCW(L"DISPLAY", NULL, NULL, NULL);
+	if (hdc)
+	{
+		LOGFONTW lf = { 0 };
+		lf.lfCharSet = DEFAULT_CHARSET;
+		EnumFontFamiliesExW(hdc, &lf, ListFontsEnumProc, reinterpret_cast<LPARAM>(&setFaces), 0);
+		DeleteDC(hdc);
+	}
+
+	std::wstring wsOut = wsExeDir + L"fonts_list.txt";
+	HANDLE hFile = CreateFileW(wsOut.c_str(), GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (hFile == INVALID_HANDLE_VALUE) return -1;
+
+	std::wstring wsText = L"Installed fonts visible to GDI (" + std::to_wstring((int)setFaces.size()) + L"):\r\n";
+	for (const auto& wsFace : setFaces) wsText += wsFace + L"\r\n";
+
+	DWORD dwWritten = 0;
+	WriteFile(hFile, wsText.c_str(), (DWORD)(wsText.size() * sizeof(wchar_t)), &dwWritten, NULL);
+	CloseHandle(hFile);
+	return (int)setFaces.size();
+}
+
 INT APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nShowCmd)
 {
 	// Resolve everything relative to this EXE's own directory,
@@ -209,6 +273,21 @@ INT APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
 	g_wsLogPath            = wsExeDir + wsExeBase + L".log";
 
 	CmdLine cl = ParseCommandLine();
+
+	if (cl.bListFonts)
+	{
+		int nFonts = ListFontsToFile(wsExeDir);
+		if (nFonts >= 0)
+		{
+			LogPrint(L"-listfonts: %d face(s) written to fonts_list.txt", nFonts);
+			MessageBoxW(NULL, (std::to_wstring(nFonts) + L" font face(s) written to fonts_list.txt (next to HookFont.exe).").c_str(), L"HookFont -listfonts", MB_OK | MB_ICONINFORMATION);
+		}
+		else
+		{
+			MessageBoxW(NULL, L"Cannot write fonts_list.txt next to HookFont.exe.", L"HookFont -listfonts", MB_OK | MB_ICONERROR);
+		}
+		return 0;
+	}
 
 	try
 	{
