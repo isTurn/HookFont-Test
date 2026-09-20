@@ -45,6 +45,31 @@
                               自动 Hook 该 API 按比例缩放引擎设置的字距）
                  用途：替换字体后行距 / 字宽 / 粗细不适配（文字错位、重叠、
                  太细太粗）时逐项微调。
+     渲染 / 字号 / 行距（同样只作用于"被替换"的字体）：
+       FontQuality     = 0    渲染质量：0 = 不干预（默认）；3 = 关闭抗锯齿；
+                              4 = ANTIALIASED（抗锯齿）；5 = CLEARTYPE（LCD 清晰）；
+                              6 = CLEARTYPE_NATURAL。替换字体后文字发虚 / 锯齿 /
+                              过粗时，优先试 4 或 5。
+       FontSizeScale   = 100  字号百分比放大 / 缩小（|lfHeight|），100 = 不缩放
+       MinFontSize     = 0    字号下限（|lfHeight| 不得小于该值，0 = 关闭）。
+                              引擎默认字号偏小时（AGE 系）用
+                              FontSizeScale = 125 或 MinFontSize = 14 强制放大。
+       LineHeightScale = 100  行距百分比。缩放 GetTextMetrics 返回的 tmHeight /
+                              tmAscent / tmDescent（引擎按它排版换行），修正替换
+                              字体后行距过窄、文字重叠。与 FontHeightScale 不同：
+                              它改的是"排版度量"，而不是字体本身的高度。
+     代码页重定向（CPRedirect，默认关闭）：
+       CPRedirectFrom     = 932   引擎认定的代码页（默认 Shift-JIS）
+       CPRedirectCodePage = 0     重定向到：0 = 关闭；936 = GBK；65001 = UTF-8
+       开启后 GetACP / GetOEMCP / GetCPInfo / MultiByteToWideChar 对引擎请求的
+       源码页一律按目标代码页解析——Shift-JIS 引擎（AGE 等）可直接按 GBK/UTF-8
+       读取文本，是"让日文引擎直接显示中文"的最后一环。
+       组合示例（AGE 引擎）：
+         CharsetSpoof = true      保留引擎字符集，字体替换不乱码
+         CPRedirectCodePage = 936 引擎按 GBK 解码（若游戏文本已是 GBK 编码）
+         AutoSC = true            繁体字形自动转简体（可选项）
+       注意：改的是解码路径而非字节流本身，个别引擎自绘缓存文字时仍可能
+       需要 [CharMap] 兜底。
      HookCreateFontA / HookCreateFontIndirectA / HookCreateFontW / HookCreateFontIndirectW
               = true / false （是否 Hook 对应的 GDI 字体创建 API，一般全开）
      HookDirectWrite = true  （是否 Hook DirectWrite 引擎；WPF/Unity 等现代

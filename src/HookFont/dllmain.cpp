@@ -134,6 +134,28 @@ static void StartHook()
 		ConfigureFontAdjust(iHeightScale, iWidthScale, iWeight, iItalic, iExtraScale);
 		if (iExtraScale != 100) HookSetTextCharacterExtra();
 
+		// Rendering tweaks: forced lfQuality (0 = leave), |lfHeight| percent scale,
+		// |lfHeight| floor (0 = off). Applied only on replaced faces.
+		int iFontQuality = (int)ReadIniKey(keys, L"FontQuality", 0);
+		int iFontSizeScale = (int)ReadIniKey(keys, L"FontSizeScale", 100);
+		int iMinFontSize = (int)ReadIniKey(keys, L"MinFontSize", 0);
+		ConfigureFontRender(iFontQuality, iFontSizeScale, iMinFontSize);
+
+		// Line spacing: scale the metrics GetTextMetrics reports to the engine
+		// (tmHeight/ascent/descent), fixing line overlap after font substitution.
+		int iLineHeightScale = (int)ReadIniKey(keys, L"LineHeightScale", 100);
+		ConfigureLineHeight(iLineHeightScale);
+		if (iLineHeightScale != 100) HookGetTextMetrics();
+
+		// Code-page redirect: Shift-JIS engines decode their byte stream with the
+		// code page they request (932). Redirect it to 936 (GBK) / 65001 (UTF-8) so
+		// the engine reads Chinese text directly. 0 = off; CPRedirectFrom is the
+		// engine's presumed page (default 932).
+		uint32_t dwCPRedirectFrom = (uint32_t)ReadIniKey(keys, L"CPRedirectFrom", (uint32_t)932);
+		uint32_t dwCPRedirectTo   = (uint32_t)ReadIniKey(keys, L"CPRedirectCodePage", (uint32_t)0);
+		ConfigureCodePageRedirect(dwCPRedirectFrom, dwCPRedirectTo);
+		if (dwCPRedirectTo) HookCodePage();
+
 		// Diagnostics: warn loudly when a configured target font is missing, so
 		// "font didn't switch" issues are obvious in the log. Runs after fonts\
 		// auto-install so session-registered fonts count as available.
@@ -178,7 +200,7 @@ static void StartHook()
 			}
 		}
 
-		LogPrint(L"HookFont initialized. Charset=0x%02X Font=%ls FontMap=%d CharMap=%d Spoof=%d AutoSC=%d", uiCharSet, wsFontName.c_str(), (int)vFontMap.size(), (int)mpChars.size(), (int)bCharsetSpoof, (int)bAutoSC);
+		LogPrint(L"HookFont initialized. Charset=0x%02X Font=%ls FontMap=%d CharMap=%d Spoof=%d AutoSC=%d CP=%u", uiCharSet, wsFontName.c_str(), (int)vFontMap.size(), (int)mpChars.size(), (int)bCharsetSpoof, (int)bAutoSC, dwCPRedirectTo);
 	}
 	catch (const std::exception& err)
 	{

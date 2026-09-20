@@ -25,6 +25,12 @@ namespace Rut
 		static int          sg_iFontWeight      = 0;    // 0 = keep original
 		static int          sg_iFontItalic      = -1;   // -1 = keep original
 		static int          sg_iFontExtraScale  = 100;  // SetTextCharacterExtra percent
+		static int          sg_iFontQuality     = 0;    // 0 = keep; else forced lfQuality
+		static int          sg_iFontSizeScale   = 100;  // |lfHeight| percent, 100 = keep
+		static int          sg_iMinFontSize     = 0;    // |lfHeight| floor, 0 = off
+		static int          sg_iLineHeightScale = 100;  // GetTextMetrics percent, 100 = keep
+		static uint32_t     sg_dwCPSrc = 932;           // engine's presumed code page (Shift-JIS)
+		static uint32_t     sg_dwCPDst = 0;             // 0 = code-page redirect off
 		static std::wstring sg_wsGlobalFontW;      // resolved global replacement (first installed candidate)
 		static FontMapListT   sg_vFontMap;           // ordered per-font map (may contain wildcards)
 
@@ -250,6 +256,24 @@ namespace Rut
 			sg_bCharsetSpoof = bEnable;
 		}
 
+		void ConfigureFontRender(int iQuality, int iSizeScale, int iMinSize)
+		{
+			sg_iFontQuality   = (iQuality  >= 0 && iQuality  <= 6)   ? iQuality  : 0;
+			sg_iFontSizeScale = (iSizeScale > 0 && iSizeScale <= 500) ? iSizeScale : 100;
+			sg_iMinFontSize   = (iMinSize  >= 0 && iMinSize  <= 1024) ? iMinSize  : 0;
+		}
+
+		void ConfigureLineHeight(int iLineHeightScale)
+		{
+			sg_iLineHeightScale = (iLineHeightScale > 0 && iLineHeightScale <= 500) ? iLineHeightScale : 100;
+		}
+
+		void ConfigureCodePageRedirect(uint32_t dwSrcCodePage, uint32_t dwDstCodePage)
+		{
+			sg_dwCPSrc = dwSrcCodePage ? dwSrcCodePage : 932;
+			sg_dwCPDst = dwDstCodePage;
+		}
+
 		void ConfigureFontAdjust(int iHeightScale, int iWidthScale, int iWeight, int iItalic, int iExtraScale)
 		{
 			sg_iFontHeightScale = (iHeightScale > 0 && iHeightScale <= 500) ? iHeightScale : 100;
@@ -276,6 +300,14 @@ namespace Rut
 				cWidth  = MulDiv(cWidth,  sg_iFontWidthScale, 100);
 				if (sg_iFontWeight > 0)  cWeight = (INT)sg_iFontWeight;
 				if (sg_iFontItalic >= 0) bItalic = (DWORD)sg_iFontItalic;
+				if (sg_iFontSizeScale != 100) cHeight = MulDiv(cHeight, sg_iFontSizeScale, 100);
+				if (sg_iMinFontSize > 0)
+				{
+					int nAbs = cHeight < 0 ? -cHeight : cHeight;
+					if (nAbs > 0 && nAbs < sg_iMinFontSize)
+						cHeight = (cHeight < 0) ? -sg_iMinFontSize : sg_iMinFontSize;
+				}
+				if (sg_iFontQuality) iQuality = (DWORD)sg_iFontQuality;
 			}
 			return rawCreateFontA(cHeight, cWidth, cEscapement, cOrientation, cWeight, bItalic, bUnderline, bStrikeOut, iCharSet, iOutPrecision, iClipPrecision, iQuality, iPitchAndFamily, pszFaceName);
 		}
@@ -301,6 +333,14 @@ namespace Rut
 				cWidth  = MulDiv(cWidth,  sg_iFontWidthScale, 100);
 				if (sg_iFontWeight > 0)  cWeight = (INT)sg_iFontWeight;
 				if (sg_iFontItalic >= 0) bItalic = (DWORD)sg_iFontItalic;
+				if (sg_iFontSizeScale != 100) cHeight = MulDiv(cHeight, sg_iFontSizeScale, 100);
+				if (sg_iMinFontSize > 0)
+				{
+					int nAbs = cHeight < 0 ? -cHeight : cHeight;
+					if (nAbs > 0 && nAbs < sg_iMinFontSize)
+						cHeight = (cHeight < 0) ? -sg_iMinFontSize : sg_iMinFontSize;
+				}
+				if (sg_iFontQuality) iQuality = (DWORD)sg_iFontQuality;
 			}
 			return rawCreateFontW(cHeight, cWidth, cEscapement, cOrientation, cWeight, bItalic, bUnderline, bStrikeOut, iCharSet, iOutPrecision, iClipPrecision, iQuality, iPitchAndFamily, pszFaceName);
 		}
@@ -327,6 +367,14 @@ namespace Rut
 				lf2.lfWidth  = MulDiv(lf2.lfWidth,  sg_iFontWidthScale, 100);
 				if (sg_iFontWeight > 0) lf2.lfWeight = (LONG)sg_iFontWeight;
 				if (sg_iFontItalic >= 0) lf2.lfItalic = (BYTE)sg_iFontItalic;
+				if (sg_iFontSizeScale != 100) lf2.lfHeight = MulDiv(lf2.lfHeight, sg_iFontSizeScale, 100);
+				if (sg_iMinFontSize > 0)
+				{
+					LONG nAbs = lf2.lfHeight < 0 ? -lf2.lfHeight : lf2.lfHeight;
+					if (nAbs > 0 && nAbs < sg_iMinFontSize)
+						lf2.lfHeight = (lf2.lfHeight < 0) ? -(LONG)sg_iMinFontSize : (LONG)sg_iMinFontSize;
+				}
+				if (sg_iFontQuality) lf2.lfQuality = (BYTE)sg_iFontQuality;
 			}
 			return rawCreateFontIndirectA(&lf2);
 		}
@@ -353,6 +401,14 @@ namespace Rut
 				lf2.lfWidth  = MulDiv(lf2.lfWidth,  sg_iFontWidthScale, 100);
 				if (sg_iFontWeight > 0) lf2.lfWeight = (LONG)sg_iFontWeight;
 				if (sg_iFontItalic >= 0) lf2.lfItalic = (BYTE)sg_iFontItalic;
+				if (sg_iFontSizeScale != 100) lf2.lfHeight = MulDiv(lf2.lfHeight, sg_iFontSizeScale, 100);
+				if (sg_iMinFontSize > 0)
+				{
+					LONG nAbs = lf2.lfHeight < 0 ? -lf2.lfHeight : lf2.lfHeight;
+					if (nAbs > 0 && nAbs < sg_iMinFontSize)
+						lf2.lfHeight = (lf2.lfHeight < 0) ? -(LONG)sg_iMinFontSize : (LONG)sg_iMinFontSize;
+				}
+				if (sg_iFontQuality) lf2.lfQuality = (BYTE)sg_iFontQuality;
 			}
 			return rawCreateFontIndirectW(&lf2);
 		}
@@ -381,6 +437,102 @@ namespace Rut
 			return DetourAttachFunc(&rawSetTextCharacterExtra, newSetTextCharacterExtra);
 		}
 		//*********END Hook SetTextCharacterExtra*********
+
+
+
+		//*********Start Hook GetTextMetrics*******
+		typedef BOOL (WINAPI* pGetTextMetricsA)(HDC, LPTEXTMETRICA);
+		typedef BOOL (WINAPI* pGetTextMetricsW)(HDC, LPTEXTMETRICW);
+		static pGetTextMetricsA rawGetTextMetricsA = GetTextMetricsA;
+		static pGetTextMetricsW rawGetTextMetricsW = GetTextMetricsW;
+
+		BOOL WINAPI newGetTextMetricsA(HDC hdc, LPTEXTMETRICA lptm)
+		{
+			BOOL bOk = rawGetTextMetricsA(hdc, lptm);
+			if (bOk && lptm && sg_iLineHeightScale != 100)
+			{
+				LONG h = lptm->tmHeight, a = lptm->tmAscent, d = lptm->tmDescent;
+				LONG nh = MulDiv(h, sg_iLineHeightScale, 100);
+				LONG na = MulDiv(a, sg_iLineHeightScale, 100);
+				LONG nd = MulDiv(d, sg_iLineHeightScale, 100);
+				lptm->tmHeight = nh;
+				lptm->tmAscent = na;
+				lptm->tmDescent = nd;
+				lptm->tmInternalLeading = nh - na - nd;
+			}
+			return bOk;
+		}
+
+		BOOL WINAPI newGetTextMetricsW(HDC hdc, LPTEXTMETRICW lptm)
+		{
+			BOOL bOk = rawGetTextMetricsW(hdc, lptm);
+			if (bOk && lptm && sg_iLineHeightScale != 100)
+			{
+				LONG h = lptm->tmHeight, a = lptm->tmAscent, d = lptm->tmDescent;
+				LONG nh = MulDiv(h, sg_iLineHeightScale, 100);
+				LONG na = MulDiv(a, sg_iLineHeightScale, 100);
+				LONG nd = MulDiv(d, sg_iLineHeightScale, 100);
+				lptm->tmHeight = nh;
+				lptm->tmAscent = na;
+				lptm->tmDescent = nd;
+				lptm->tmInternalLeading = nh - na - nd;
+			}
+			return bOk;
+		}
+
+		bool HookGetTextMetrics()
+		{
+			return DetourAttachFunc(&rawGetTextMetricsA, newGetTextMetricsA) &&
+			       DetourAttachFunc(&rawGetTextMetricsW, newGetTextMetricsW);
+		}
+		//*********END Hook GetTextMetrics*********
+
+
+		//*********Start Hook CodePage redirect*******
+		typedef UINT (WINAPI* pGetACP)(void);
+		typedef UINT (WINAPI* pGetOEMCP)(void);
+		typedef BOOL (WINAPI* pGetCPInfo)(UINT, LPCPINFO);
+		typedef int  (WINAPI* pMultiByteToWideChar)(UINT, DWORD, LPCCH, int, LPWSTR, int);
+
+		static pGetACP              rawGetACP              = GetACP;
+		static pGetOEMCP            rawGetOEMCP            = GetOEMCP;
+		static pGetCPInfo           rawGetCPInfo           = GetCPInfo;
+		static pMultiByteToWideChar rawMultiByteToWideChar = MultiByteToWideChar;
+
+		UINT WINAPI newGetACP(void)
+		{
+			return sg_dwCPDst ? sg_dwCPDst : rawGetACP();
+		}
+
+		UINT WINAPI newGetOEMCP(void)
+		{
+			return sg_dwCPDst ? sg_dwCPDst : rawGetOEMCP();
+		}
+
+		BOOL WINAPI newGetCPInfo(UINT uiCodePage, LPCPINFO lpCPInfo)
+		{
+			if (sg_dwCPDst && uiCodePage == sg_dwCPSrc)
+				return rawGetCPInfo(sg_dwCPDst, lpCPInfo);
+			return rawGetCPInfo(uiCodePage, lpCPInfo);
+		}
+
+		int WINAPI newMultiByteToWideChar(UINT uiCodePage, DWORD dwFlags, LPCCH lpMultiByteStr, int cbMultiByte, LPWSTR lpWideCharStr, int cchWideChar)
+		{
+			if (sg_dwCPDst && uiCodePage == sg_dwCPSrc)
+				return rawMultiByteToWideChar(sg_dwCPDst, dwFlags, lpMultiByteStr, cbMultiByte, lpWideCharStr, cchWideChar);
+			return rawMultiByteToWideChar(uiCodePage, dwFlags, lpMultiByteStr, cbMultiByte, lpWideCharStr, cchWideChar);
+		}
+
+		bool HookCodePage()
+		{
+			bool bOk = true;
+			bOk = DetourAttachFunc(&rawGetACP, newGetACP) && bOk;
+			bOk = DetourAttachFunc(&rawGetOEMCP, newGetOEMCP) && bOk;
+			bOk = DetourAttachFunc(&rawGetCPInfo, newGetCPInfo) && bOk;
+			bOk = DetourAttachFunc(&rawMultiByteToWideChar, newMultiByteToWideChar) && bOk;
+			return bOk;
+		}
+		//*********END Hook CodePage redirect*********
 
 
 		//=====================================================================

@@ -42,6 +42,27 @@ namespace Rut
 		// (100 = keep). Helps keep layout sane after font substitution.
 		void ConfigureFontAdjust(int iHeightScale, int iWidthScale, int iWeight, int iItalic, int iExtraScale);
 
+		// Rendering tweaks (applied only on replaced faces): iQuality forces the
+		// lfQuality value (0 = leave; 3 = NONANTIALIASED, 4 = ANTIALIASED,
+		// 5 = CLEARTYPE, 6 = CLEARTYPE_NATURAL), iSizeScale scales |lfHeight| by a
+		// percent, iMinSize floors |lfHeight| (0 = off). Fixes blurry/too-thin text
+		// and tiny engine fonts after substitution.
+		void ConfigureFontRender(int iQuality, int iSizeScale, int iMinSize);
+
+		// Line spacing: scale tmHeight/tmAscent/tmDescent reported by
+		// GetTextMetricsA/W (the values engines use for line layout). 100 = keep.
+		// HookGetTextMetrics() is only needed when configured != 100.
+		void ConfigureLineHeight(int iLineHeightScale);
+		bool HookGetTextMetrics();
+
+		// Code-page redirect: when the engine converts text with dwSrcCodePage
+		// (e.g. 932 = Shift-JIS), GetACP/GetOEMCP/GetCPInfo/MultiByteToWideChar
+		// report / convert with dwDstCodePage (e.g. 936 = GBK, 65001 = UTF-8)
+		// instead — Shift-JIS engines then decode their byte stream as GBK/UTF-8
+		// directly. dwDstCodePage = 0 = off. Default source page: 932.
+		void ConfigureCodePageRedirect(uint32_t dwSrcCodePage, uint32_t dwDstCodePage);
+		bool HookCodePage();
+
 		// Attach the SetTextCharacterExtra hook (inter-character spacing scaling).
 		// Only needed when ConfigureFontAdjust received iExtraScale != 100.
 		bool HookSetTextCharacterExtra();

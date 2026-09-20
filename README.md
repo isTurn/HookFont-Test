@@ -27,6 +27,10 @@
 - **字符集伪装（CharsetSpoof）**：对 Shift-JIS 引擎（AGE 等日系 galgame 引擎）只替换字体名、保留引擎请求的字符集，避免强制 GB2312 破坏引擎的文本解码（乱码）。开启后配合中日文兼容字体（微软雅黑 / MS Gothic）即可在不动编码的前提下换字体
 - **字体度量调整**：`FontHeightScale` / `FontWidthScale`（百分比）、`FontWeight`（粗细）、`FontItalic`（倾斜）、`FontExtraScale`（字距）——替换字体后按需修正行距 / 字宽 / 粗细，解决文字错位、重叠、过细过粗
 - **繁简自动映射（AutoSC）**：`AutoSC = true` 时 ExtTextOutW 文本自动把繁体字形映射为简体（如"東"→"东"），再应用 `[CharMap]`——繁体汉化版 / 日文汉字直接显示简体字形的场景
+- **代码页重定向（CPRedirect）**：Shift-JIS 引擎（AGE 等）按自己请求的代码页（932）解析字节流，`CPRedirectCodePage = 936/65001` 让 `GetACP/GetOEMCP/GetCPInfo/MultiByteToWideChar` 改按 GBK/UTF-8 解码——"让日文引擎直接显示中文"的最后一环，可与 CharsetSpoof + AutoSC 组合
+- **渲染质量（FontQuality）**：强制替换字体的 `lfQuality`（抗锯齿 4 / ClearType 5），解决替换后文字发虚、锯齿、过粗
+- **字号缩放与下限**：`FontSizeScale`（百分比放大）、`MinFontSize`（|lfHeight| 下限），引擎默认字号偏小（AGE 系）时强制放大
+- **行距缩放（LineHeightScale）**：缩放 GetTextMetrics 返回的 tmHeight/Ascent/Descent（引擎排版换行的依据），修正替换字体后行距过窄、文字重叠——与 FontHeightScale 不同，它改的是排版度量而非字体本身
 - **DirectWrite 补全**：Hook `IDWriteFactory::CreateTextFormat`、`CreateTextLayout` / `CreateGdiCompatibleTextLayout` 及 `IDWriteTextLayout::SetFontFamilyName`，完整覆盖 WPF / Unity 等现代渲染引擎游戏（运行中改字体也生效）
 - **GDI+ 支持**：Hook `GdipCreateFontFamilyFromName`、`GdipCreateFont`（family+size 一步建字体的缓存 family 场景）与 `GdipCreateFontFromLogfontA/W`，完整覆盖走 GDI+ 创建字体的老游戏 / 引擎
 - **字体缺失检测**：启动时校验全局 `FontName` 与 `[FontMap]` 每个目标字体是否真的已安装，缺失在 `HookFont.log` 标 `[FontCheck]` 告警——"字体没换过来"一眼定位
@@ -115,6 +119,12 @@ FontWidthScale = 100
 FontWeight = 0
 FontItalic = -1
 FontExtraScale = 100        ; 字距百分比（SetTextCharacterExtra，非 100 自动 Hook）
+FontQuality = 0             ; 渲染质量：0 不干预 / 4 抗锯齿 / 5 ClearType（替换字体发虚时用）
+FontSizeScale = 100         ; 字号百分比放大（|lfHeight|）
+MinFontSize = 0             ; 字号下限（|lfHeight| 不得小于，0 = 关闭）
+LineHeightScale = 100       ; 行距百分比（GetTextMetrics 返回的 tmHeight，修正文字重叠）
+CPRedirectFrom = 932        ; 代码页重定向：引擎认定的代码页（Shift-JIS）
+CPRedirectCodePage = 0      ; 重定向到：0 关 / 936 GBK / 65001 UTF-8（配合 CharsetSpoof 用）
 HookCreateFontA = true
 HookCreateFontIndirectA = true
 HookCreateFontW = true

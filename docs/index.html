@@ -250,6 +250,8 @@
       <div class="feat"><div class="f-ico">🎭</div><h3>字符集伪装</h3><p>对 Shift-JIS 引擎（AGE 等日系 galgame 引擎）只换字体名、保留引擎请求的字符集，避免强制 GB2312 把引擎文本按错误编码解析成乱码；配合中日兼容字体（微软雅黑 / MS Gothic）在不动编码的前提下换字体。</p></div>
       <div class="feat"><div class="f-ico">📐</div><h3>字体度量调整</h3><p><code>FontHeightScale</code> / <code>FontWidthScale</code>（百分比）、<code>FontWeight</code>、<code>FontItalic</code> 与 <code>FontExtraScale</code>（字距）——替换字体后按需修正行距 / 字宽 / 粗细，解决文字错位、重叠、过细过粗。</p></div>
       <div class="feat"><div class="f-ico">🀄</div><h3>繁简自动映射</h3><p><code>AutoSC</code> 开启后 ExtTextOutW 文本自动把繁体字形映射为简体（"東"→"东"），再应用 <code>[CharMap]</code>——繁体汉化版 / 日文汉字直接显示简体字形。</p></div>
+      <div class="feat"><div class="f-ico">🧭</div><h3>代码页重定向</h3><p><code>CPRedirectCodePage</code> 让 Shift-JIS 引擎（AGE 等）的 <code>GetACP/GetOEMCP/GetCPInfo/MultiByteToWideChar</code> 改按 GBK / UTF-8 解码字节流——"让日文引擎直接显示中文"的最后一环，可与 <code>CharsetSpoof</code> + <code>AutoSC</code> 组合。</p></div>
+      <div class="feat"><div class="f-ico">🖼</div><h3>渲染 / 字号 / 行距</h3><p><code>FontQuality</code>（抗锯齿 / ClearType）、<code>FontSizeScale</code> / <code>MinFontSize</code>（字号放大与下限）、<code>LineHeightScale</code>（GetTextMetrics 行距度量）——替换字体后发虚、过小、行距重叠逐项修正。</p></div>
       <div class="feat"><div class="f-ico">🎨</div><h3>DirectWrite 补全</h3><p>Hook <code>IDWriteFactory::CreateTextFormat</code>、<code>CreateTextLayout</code> 与 <code>IDWriteTextLayout::SetFontFamilyName</code>（vtable 补丁，无 dwrite.lib 依赖），覆盖 WPF / Unity 等现代引擎，运行时改字体也生效。</p></div>
       <div class="feat"><div class="f-ico">🖌️</div><h3>GDI+ 全补全</h3><p>Hook <code>GdipCreateFontFamilyFromName</code>、<code>GdipCreateFont</code>（family+size 一步建字体，含缓存 family）与 <code>GdipCreateFontFromLogfontA/W</code>，走 GDI+ 的老游戏 / 引擎全部覆盖。</p></div>
       <div class="feat"><div class="f-ico">🔎</div><h3>字体缺失检测</h3><p>启动时校验 <code>FontName</code> 与 <code>[FontMap]</code> 每个目标字体是否已安装，缺失在日志标 <code>[FontCheck]</code> 告警——"字体没换过来"一眼定位。</p></div>
@@ -340,6 +342,12 @@
 <span class="k">FontWeight</span> = <span class="s">0</span>                  <span class="c"># 粗细：0 = 保持原值（400 常规 / 700 粗体）</span>
 <span class="k">FontItalic</span> = <span class="s">-1</span>                 <span class="c"># 倾斜：-1 = 保持原值</span>
 <span class="k">FontExtraScale</span> = <span class="s">100</span>             <span class="c"># 字距百分比（SetTextCharacterExtra）</span>
+<span class="k">FontQuality</span> = <span class="s">0</span>                  <span class="c"># 渲染质量：0 不干预 / 4 抗锯齿 / 5 ClearType</span>
+<span class="k">FontSizeScale</span> = <span class="s">100</span>             <span class="c"># 字号百分比放大（|lfHeight|）</span>
+<span class="k">MinFontSize</span> = <span class="s">0</span>                  <span class="c"># 字号下限（0 = 关闭）</span>
+<span class="k">LineHeightScale</span> = <span class="s">100</span>           <span class="c"># 行距百分比（GetTextMetrics tmHeight）</span>
+<span class="k">CPRedirectFrom</span> = <span class="s">932</span>             <span class="c"># 代码页重定向：引擎认定的代码页（Shift-JIS）</span>
+<span class="k">CPRedirectCodePage</span> = <span class="s">0</span>          <span class="c"># 重定向到：0 关 / 936 GBK / 65001 UTF-8</span>
 <span class="k">HookCreateFontA</span> = <span class="s">true</span>
 <span class="k">HookCreateFontIndirectA</span> = <span class="s">true</span>
 <span class="k">HookCreateFontW</span> = <span class="s">true</span>
@@ -462,6 +470,26 @@
             <td><code>GetGlyphOutline</code> 字形级替换</td>
             <td class="opt">○ 可选</td>
             <td>同一 <code>[CharMap]</code>，覆盖直接抓字形位图的老引擎</td>
+          </tr>
+          <tr>
+            <td><code>AutoSC</code> 繁简自动映射</td>
+            <td class="opt">○ 可选</td>
+            <td>ExtTextOutW 文本先繁→简再应用 <code>[CharMap]</code></td>
+          </tr>
+          <tr>
+            <td><code>FontQuality</code> / <code>FontSizeScale</code> / <code>MinFontSize</code></td>
+            <td class="opt">○ 可选</td>
+            <td>替换字体的渲染质量 / 字号缩放 / 字号下限</td>
+          </tr>
+          <tr>
+            <td><code>GetTextMetrics</code> 行距度量</td>
+            <td class="opt">○ 可选</td>
+            <td><code>LineHeightScale</code> 缩放 tmHeight/Ascent/Descent，修正行距重叠</td>
+          </tr>
+          <tr>
+            <td><code>GetACP</code> / <code>GetCPInfo</code> / <code>MultiByteToWideChar</code></td>
+            <td class="opt">○ 可选</td>
+            <td><code>CPRedirectCodePage</code> 代码页重定向，Shift-JIS 引擎按 GBK/UTF-8 解码</td>
           </tr>
           <tr>
             <td>位图自绘字体（部分引擎）</td>

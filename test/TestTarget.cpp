@@ -294,6 +294,70 @@ static void TestFontMetrics(const char* tag)
 }
 
 
+// Rendering tweaks: FontSizeScale (percent) + MinFontSize (|lfHeight| floor),
+// applied on replaced faces. With scale=150 / min=16, lfHeight 10 -> 15 -> 16
+// (clamped), lfHeight 20 -> 30. Verified by comparing baseline vs configured runs.
+static void TestRenderTweaks(const char* tag)
+{
+    LOGFONTW lf = { 0 };
+    lf.lfCharSet = ANSI_CHARSET;
+    wcscpy_s(lf.lfFaceName, L"MS Gothic");   // hit [FontMap] -> replaced font
+
+    lf.lfHeight = 10;
+    HFONT hfA = CreateFontIndirectW(&lf);
+    LOGFONTW loA = { 0 };
+    GetObjectW(hfA, sizeof(loA), &loA);
+
+    lf.lfHeight = 20;
+    HFONT hfB = CreateFontIndirectW(&lf);
+    LOGFONTW loB = { 0 };
+    GetObjectW(hfB, sizeof(loB), &loB);
+
+    wchar_t buf[96];
+    swprintf_s(buf, 96, L"a=%d b=%d", (int)loA.lfHeight, (int)loB.lfHeight);
+    DeleteObject(hfA);
+    DeleteObject(hfB);
+    WriteResult(tag, 1, buf);
+}
+
+
+// Line spacing: GetTextMetrics values the engine sees. With LineHeightScale=200
+// tmHeight/ascent/descent double while internal leading stays consistent.
+static void TestTextMetrics(const char* tag)
+{
+    HDC hdc = CreateCompatibleDC(NULL);
+    if (!hdc) { WriteResult(tag, 0, L"DC_FAIL"); return; }
+
+    HFONT hf = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                           DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"MS Gothic");
+    HGDIOBJ hOld = SelectObject(hdc, hf);
+
+    TEXTMETRICW tm = { 0 };
+    BOOL ok = GetTextMetricsW(hdc, &tm);
+    wchar_t buf[96];
+    swprintf_s(buf, 96, L"H=%d A=%d D=%d IL=%d", (int)tm.tmHeight, (int)tm.tmAscent, (int)tm.tmDescent, (int)tm.tmInternalLeading);
+
+    SelectObject(hdc, hOld);
+    DeleteObject(hf);
+    DeleteDC(hdc);
+    WriteResult(tag, (BYTE)ok, buf);
+}
+
+
+// Code-page redirect: with CPRedirectCodePage=65001, GetACP reports 65001 and
+// GetCPInfo(932) returns UTF-8's CPINFO (MaxCharSize=4 instead of 2).
+static void TestCodePage(const char* tag)
+{
+    UINT acp = GetACP();
+    CPINFO info = { 0 };
+    BOOL ok = GetCPInfo(932, &info);
+    wchar_t buf[96];
+    swprintf_s(buf, 96, L"acp=%u cpiMax=%u", acp, (UINT)info.MaxCharSize);
+    WriteResult(tag, (BYTE)ok, buf);
+}
+
+
 // Glyph-level replacement:
 // GetGlyphOutlineW/A. The injected DLL maps あ (U+3042) -> 阿 before the outline
 // is fetched; the rewrite is verified from HookFont.log ("[CharMap]
@@ -424,6 +488,9 @@ int main()
     TestGlyphOutline("Glyph");
     TestCharsetSpoof();
     TestFontMetrics("FontMetrics");
+    TestRenderTweaks("RenderTweaks");
+    TestTextMetrics("TextMetrics");
+    TestCodePage("CodePage");
 
     return 0;
 }
