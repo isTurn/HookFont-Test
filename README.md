@@ -44,6 +44,12 @@
 - **窗口标题替换**：Hook `CreateWindowExA/W` + `SetWindowTextA/W`，创建窗口与运行时改标题都会被替换（宽字符安全）
 - **字符级替换（ExtTextOut/TextOut）**：`[CharMap]` 段逐字符映射表，文本经 GDI `ExtTextOut`/`TextOut` 绘制前逐字替换——用于引擎锁定字体、个别字符变豆腐块时的兜底（如日文标点/假名按字形近似替换）
 - **字形级替换（GetGlyphOutline）**：同一 `[CharMap]` 表作用于 `GetGlyphOutlineA/W` 字形查询——覆盖不渲染文本、直接抓取字形位图的老 DirectX 引擎（与 ExtTextOut 替换互补）
+- **字体名伪装（FaceNameSpoof）**：`GetTextFaceA/W`、`GetObjectW`（LOGFONT 查询）返回引擎"请求的原始字体名"而非替换名——解决部分引擎创建字体后校验名字、发现被换就拒绝使用 / 反复重建的问题（与 CharsetSpoof 同为表面层伪装，不影响实际替换）
+- **字体枚举伪装（EnumFontSpoof）**：引擎先用 `EnumFontFamiliesExW` 确认字体存在才创建时，对 `[FontMap]` 中精确命中的字体即使系统没装也伪造"存在"——解决"明明映射了却不换"（引擎因枚举不到就放弃）
+- **DrawText 字符级替换**：`HookDrawText = true` 后 `[CharMap]` / `AutoSC` 同样作用于 `DrawTextA/W` 绘制的按钮、静态文本（部分引擎用 DrawText 而非 ExtTextOut）
+- **多配置段**：`[HookFont:游戏.exe]` 覆盖段——一份 INI 管理多个游戏，该进程启动时用覆盖段键值顶替 `[HookFont]` 全局段（只覆盖写了的键）
+- **热重载（HotReload）**：运行时每秒检查 INI 修改时间，变化自动重新加载（字体名 / [FontMap] / [CharMap] / 缩放 / 伪装等即时生效），调配置不用重启游戏；Hook 开关类改动仍需重启
+- **诊断模式（-diag / Diagnostic=true）**：只记录不替换——每次字体创建请求（字体名 / 字符集 / 字号 / 质量）与文本绘制写进日志，定位"为什么字体没换过来"；排查完关闭
 - **免配置环境**：配置按程序自身目录解析，不依赖当前工作目录；中文路径自动转 8.3 短路径
 - **延迟 Hook**：从工作线程延迟执行 Hook，规避加载器锁死锁风险
 - **日志排查**：运行日志落盘（`HookFont.log`），异常可追查，不弹窗卡游戏
@@ -136,6 +142,15 @@ HookWindowTitle = false
 HookTextOut = false        ; 字符级替换开关（配合下方 [CharMap]）
 HookGlyphOutline = false   ; 字形级替换开关（同样走 [CharMap]，老 DirectX 引擎兜底）
 AutoSC = false             ; 繁简自动映射（ExtTextOutW 文本先繁→简再应用 [CharMap]）
+HookDrawText = false       ; DrawTextA/W 也走 [CharMap]/AutoSC（按钮/静态文本场景）
+FaceNameSpoof = false      ; 字体名伪装：GetTextFace/GetObject 返回引擎请求的原始名字
+EnumFontSpoof = false      ; 枚举伪装：[FontMap] 精确命中的字体即使没装也向引擎伪造"存在"
+Diagnostic = false         ; 诊断模式：只记录不替换（也可用启动器 -diag 开启）
+HotReload = false          ; 热重载：INI 变化自动重新加载（Hook 开关类改动需重启）
+
+; 多配置段（可选）：[HookFont:游戏.exe] 覆盖 [HookFont] 全局段，一份 INI 管多个游戏
+; [HookFont:oyjyousama.exe]
+; FontName = 宋体
 
 [FontMap]
 MS Gothic = 黑体
@@ -154,6 +169,7 @@ MS* = 黑体        ; 通配符：所有 MS 开头的字体都换成黑体
 ```
 HookFont.exe <游戏exe路径> [游戏参数...]   # 直接启动指定游戏并透传参数
 HookFont.exe -pid <进程ID>                # 注入到已运行的进程（位数需匹配）
+HookFont.exe -diag                        # 诊断模式：只记录字体请求不替换（等价 ini Diagnostic=true）
 ```
 
 **约定与注意**

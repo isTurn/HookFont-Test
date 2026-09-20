@@ -55,6 +55,27 @@
                               引擎默认字号偏小时（AGE 系）用
                               FontSizeScale = 125 或 MinFontSize = 14 强制放大。
        LineHeightScale = 100  行距百分比。缩放 GetTextMetrics 返回的 tmHeight /
+	     第二梯队 · 伪装 / 排查 / 便捷（全部默认关闭）：
+	       FaceNameSpoof  = false  字体名伪装：开启后 GetTextFaceA/W 与 GetObjectW
+	                              （LOGFONT 查询）返回引擎"请求的原始字体名"而非替换名，
+	                              解决部分引擎创建字体后校验名字、发现被换就拒绝使用 /
+	                              反复重建的问题。与 CharsetSpoof 同为表面层伪装。
+	       EnumFontSpoof  = false  字体枚举伪装：引擎先用 EnumFontFamiliesExW 确认字体
+	                              "真的存在"才创建时，对 [FontMap] 精确（非通配）命中的
+	                              字体即使系统没装也向引擎伪造"存在"条目，让引擎继续走
+	                              创建流程、再被 Hook 换成目标字体。
+	       HookDrawText   = false  DrawTextA/W 也走 [CharMap]/AutoSC（按钮、静态文本
+	                              用 DrawText 绘制的引擎；与 HookTextOut 独立）。
+	       Diagnostic     = false  诊断模式：只记录、不替换——每次字体创建请求（字体名 /
+	                              字符集 / 字号 / 质量）与一段文本绘制写进日志，用于排查
+	                              "为什么字体没换过来"。也可用启动器 -diag 开启（等价）。
+	                              注意：只拦截 GDI 字体创建，DirectWrite / GDI+ 仍按配置
+	                              替换。排查完记得关闭。
+	       HotReload      = false  热重载：开启后每秒检查本 INI 修改时间，变化自动重新
+	                              加载（字体名 / [FontMap] / [CharMap] / 缩放 / 伪装等
+	                              即时生效），调配置不用重启游戏。Hook 开关类
+	                              （HookXXX = true/false）改动仍需重启。默认关闭
+	                              （常驻轮询线程，不用就关掉）。
                               tmAscent / tmDescent（引擎按它排版换行），修正替换
                               字体后行距过窄、文字重叠。与 FontHeightScale 不同：
                               它改的是"排版度量"，而不是字体本身的高度。
@@ -152,6 +173,14 @@
 - 若游戏没有反应，先看这两个日志。
 - 游戏目录含中文等特殊字符路径时程序会自动处理，一般无需担心。
 
+多配置段（可选）：一份 INI 管理多个游戏
+- 段名写作 [HookFont:进程文件名]（含 .exe），该进程启动时用这一段里的键覆盖
+  [HookFont] 全局段（只覆盖写了的键，未写的沿用全局）。
+- 例：只想把 ojyousama.exe 的字体单独设为宋体：
+    [HookFont:oyjyousama.exe]
+    FontName = 宋体
+- 用不到就删掉对应段即可。
+
 三、常见问题
 - 字体没变：检查 [HookFont] 段是否存在、FontName 是否正确安装（或已放入 fonts\ 目录自动安装）。
 - 个别字体想换、但不想全局替换：在 [FontMap] 里加"原字体名 = 新字体名"（支持 * / ? 通配），
@@ -162,3 +191,9 @@
 - 目标字体系统没装、又不想手动装：把字体文件放进游戏目录 fonts\ 子目录即可自动注册。
 - 游戏动态改字体（运行时换字体）没替换：新版已覆盖 IDWriteTextLayout::SetFontFamilyName，无需额外配置。
 - 旧版只有 A 版 Hook：新版默认同时 Hook A 与 W 版，并支持 DirectWrite / GDI+，覆盖更全。
+- 字体没换过来、又不知道引擎到底请求了什么字体：用 HookFont.exe -diag 启动（或 ini 设
+  Diagnostic = true），日志会逐条记录引擎的字体创建请求（字体名 / 字符集 / 字号 / 质量），
+  对照 [FontMap] 检查为什么没命中；排查完关闭（否则不替换字体）。
+- 引擎"明明装了字体却不用"（先枚举确认存在才创建）：开 EnumFontSpoof = true。
+- 引擎校验字体名、发现被换就反复重建 / 拒绝使用：开 FaceNameSpoof = true。
+- 调字体/映射不想重启游戏：开 HotReload = true，改 INI 保存后自动生效。

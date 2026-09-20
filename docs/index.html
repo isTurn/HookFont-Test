@@ -265,6 +265,9 @@
       <div class="feat"><div class="f-ico">🪟</div><h3>窗口标题替换</h3><p>Hook <code>CreateWindowExA/W</code> 与 <code>SetWindowTextA/W</code> 四 API，创建窗口与运行时改标题都被替换（宽字符安全）。</p></div>
       <div class="feat"><div class="f-ico">🔤</div><h3>字符级替换</h3><p><code>[CharMap]</code> 逐字符映射表，文本经 <code>ExtTextOut</code>/<code>TextOut</code> 绘制前逐字替换——引擎锁定字体、字符变豆腐块时的兜底。</p></div>
       <div class="feat"><div class="f-ico">🅰️</div><h3>字形级替换</h3><p>同一 <code>[CharMap]</code> 作用于 <code>GetGlyphOutlineA/W</code> 字形查询，覆盖直接抓取字形位图的老 DirectX 引擎。</p></div>
+      <div class="feat"><div class="f-ico">🎭</div><h3>字体名伪装</h3><p><code>GetTextFace</code> / <code>GetObjectW</code> 返回引擎请求的原始字体名——引擎校验字体名时以为"没被换"，配合 <code>CharsetSpoof</code> 全链路隐身。</p></div>
+      <div class="feat"><div class="f-ico">🔎</div><h3>枚举伪装 + 诊断</h3><p><code>EnumFontSpoof</code> 向 <code>EnumFontFamiliesExW</code> 伪造 [FontMap] 命中；<code>-diag</code> 只记录不替换，把引擎请求的字体 / 字符集 / 字号全部写进日志。</p></div>
+      <div class="feat"><div class="f-ico">♻️</div><h3>热重载 + 多配置段</h3><p><code>HotReload</code> 改 INI 自动生效不重启；<code>[HookFont:游戏.exe]</code> 覆盖段让一份 INI 管多个游戏。</p></div>
       <div class="feat"><div class="f-ico">📁</div><h3>中文路径兼容</h3><p>EXE / DLL 路径自动转 8.3 短路径，中文目录 / 文件名完全兼容。</p></div>
       <div class="feat"><div class="f-ico">⏳</div><h3>延迟 Hook</h3><p>从工作线程延迟执行 Hook，规避加载器锁死锁风险，<code>DisableThreadLibraryCalls</code> 已启用。</p></div>
       <div class="feat"><div class="f-ico">📜</div><h3>日志排查</h3><p>运行日志落盘（<code>HookFont.log</code>），失败原因可追查，不弹窗卡游戏。</p></div>
@@ -358,6 +361,11 @@
 <span class="k">HookWindowTitle</span> = <span class="s">false</span>
 <span class="k">HookTextOut</span> = <span class="s">false</span>             <span class="c"># 字符级替换开关（配合 [CharMap]）</span>
 <span class="k">AutoSC</span> = <span class="s">false</span>                 <span class="c"># 繁简自动映射：繁体字形自动转简体后再应用 [CharMap]</span>
+<span class="k">HookDrawText</span> = <span class="s">false</span>             <span class="c"># DrawTextA/W 也走 [CharMap]/AutoSC（按钮/静态文本）</span>
+<span class="k">FaceNameSpoof</span> = <span class="s">false</span>              <span class="c"># 字体名伪装：GetTextFace/GetObject 返回引擎请求的原始名字</span>
+<span class="k">EnumFontSpoof</span> = <span class="s">false</span>              <span class="c"># 枚举伪装：[FontMap] 精确命中的字体即使没装也伪造"存在"</span>
+<span class="k">Diagnostic</span> = <span class="s">false</span>                 <span class="c"># 诊断模式：只记录不替换（启动器 -diag 等效）</span>
+<span class="k">HotReload</span> = <span class="s">false</span>                  <span class="c"># 热重载：INI 变化自动重新加载（Hook 开关类改动需重启）</span>
 <span class="k">HookGlyphOutline</span> = <span class="s">false</span>         <span class="c"># 字形级替换开关（老 DirectX 引擎兜底）</span>
 
 <span class="k">[FontMap]</span>                          <span class="c"># 按字体替换，优先于全局；支持通配</span>
@@ -470,6 +478,31 @@
             <td><code>GetGlyphOutline</code> 字形级替换</td>
             <td class="opt">○ 可选</td>
             <td>同一 <code>[CharMap]</code>，覆盖直接抓字形位图的老引擎</td>
+          </tr>
+          <tr>
+            <td><code>FaceNameSpoof</code> 字体名伪装</td>
+            <td class="opt">○ 可选</td>
+            <td>GetTextFace/GetObjectW 返回引擎请求的原始字体名，防校验拒用</td>
+          </tr>
+          <tr>
+            <td><code>EnumFontSpoof</code> 枚举伪装</td>
+            <td class="opt">○ 可选</td>
+            <td>EnumFontFamiliesExW 对 [FontMap] 精确命中伪造"存在"，防引擎放弃</td>
+          </tr>
+          <tr>
+            <td><code>HookDrawText</code> DrawText 替换</td>
+            <td class="opt">○ 可选</td>
+            <td>DrawTextA/W 按钮/静态文本同走 [CharMap]/AutoSC</td>
+          </tr>
+          <tr>
+            <td><code>Diagnostic</code> 诊断模式</td>
+            <td class="opt">○ 可选</td>
+            <td>只记录字体创建请求不替换（启动器 -diag 等效）</td>
+          </tr>
+          <tr>
+            <td><code>HotReload</code> / <code>[HookFont:exe]</code></td>
+            <td class="opt">○ 可选</td>
+            <td>INI 变化自动重载；按进程名覆盖段，一份 INI 管多游戏</td>
           </tr>
           <tr>
             <td><code>AutoSC</code> 繁简自动映射</td>

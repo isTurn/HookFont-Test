@@ -345,6 +345,89 @@ static void TestTextMetrics(const char* tag)
 }
 
 
+// Face-name spoof: create "MS Gothic" (FontMap -> 黑体), then read the face
+// back via GetTextFaceW and GetObjectW. With FaceNameSpoof=true the engine
+// sees "MS Gothic" (the requested name); with it off it sees 黑体 (the actual
+// replacement). Either way the call must succeed.
+static void TestFaceSpoof(const char* tag)
+{
+    HDC hdc = CreateCompatibleDC(NULL);
+    if (!hdc) { WriteResult(tag, 0, L"DC_FAIL"); return; }
+
+    HFONT hf = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                           DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"MS Gothic");
+    HGDIOBJ hOld = SelectObject(hdc, hf);
+
+    wchar_t faceTF[LF_FACESIZE] = { 0 };
+    int n1 = GetTextFaceW(hdc, LF_FACESIZE, faceTF);
+
+    LOGFONTW lfObj = { 0 };
+    int n2 = GetObjectW(hf, sizeof(LOGFONTW), &lfObj);
+
+    SelectObject(hdc, hOld);
+    DeleteObject(hf);
+    DeleteDC(hdc);
+
+    wchar_t buf[160];
+    swprintf_s(buf, 160, L"GetTextFace=%ls GetObject=%ls", n1 > 0 ? faceTF : L"FAIL", n2 > 0 ? lfObj.lfFaceName : L"FAIL");
+    WriteResult(tag, (BYTE)(n1 > 0 && n2 > 0), buf);
+}
+
+
+// DrawText support: draw text through DrawTextW; the injected DLL maps
+// 「あ」 via [CharMap]/AutoSC (verified in HookFont.log as "[CharMap] DrawTextW").
+// Here we only prove the call itself succeeds and doesn't crash.
+static void TestDrawText(const char* tag)
+{
+    HDC hdc = CreateCompatibleDC(NULL);
+    if (!hdc) { WriteResult(tag, 0, L"DC_FAIL"); return; }
+
+    HFONT hf = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                           DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"MS Gothic");
+    HGDIOBJ hOld = SelectObject(hdc, hf);
+
+    RECT rc = { 0, 0, 200, 40 };
+    int n = DrawTextW(hdc, L"「あ」", -1, &rc, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
+
+    SelectObject(hdc, hOld);
+    DeleteObject(hf);
+    DeleteDC(hdc);
+
+    wchar_t buf[64];
+    swprintf_s(buf, 64, L"ret=%d", n);
+    WriteResult(tag, (BYTE)(n != 0), buf);
+}
+
+
+// Font-enumeration spoof: ask EnumFontFamiliesExW for "MissingFont" (a FontMap
+// key that is NOT installed). With EnumFontSpoof=true the hook fakes a hit, so
+// the callback fires once; with it off the callback never sees the face.
+static int CALLBACK EnumCountProc(CONST LOGFONTW* lplf, CONST TEXTMETRICW* lptm, DWORD dwType, LPARAM lParam)
+{
+    int* pFound = (int*)lParam;
+    if (lplf && lplf->lfFaceName[0]) ++*pFound;
+    return 1; // keep enumerating
+}
+
+static void TestEnumFont(const char* tag)
+{
+    HDC hdc = CreateCompatibleDC(NULL);
+    if (!hdc) { WriteResult(tag, 0, L"DC_FAIL"); return; }
+
+    LOGFONTW lf = { 0 };
+    wcscpy_s(lf.lfFaceName, L"MissingFont");
+    int nFound = 0;
+    EnumFontFamiliesExW(hdc, &lf, EnumCountProc, (LPARAM)&nFound, 0);
+
+    DeleteDC(hdc);
+    wchar_t buf[64];
+    swprintf_s(buf, 64, L"found=%d", nFound);
+    WriteResult(tag, (BYTE)(nFound > 0), buf);
+}
+
+
 // Code-page redirect: with CPRedirectCodePage=65001, GetACP reports 65001 and
 // GetCPInfo(932) returns UTF-8's CPINFO (MaxCharSize=4 instead of 2).
 static void TestCodePage(const char* tag)
@@ -491,6 +574,9 @@ int main()
     TestRenderTweaks("RenderTweaks");
     TestTextMetrics("TextMetrics");
     TestCodePage("CodePage");
+    TestFaceSpoof("FaceSpoof");
+    TestDrawText("DrawText");
+    TestEnumFont("EnumFont");
 
     return 0;
 }

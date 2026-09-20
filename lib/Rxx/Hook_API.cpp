@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <cwchar>
 #include <algorithm>
 
@@ -31,6 +32,19 @@ namespace Rut
 		static int          sg_iLineHeightScale = 100;  // GetTextMetrics percent, 100 = keep
 		static uint32_t     sg_dwCPSrc = 932;           // engine's presumed code page (Shift-JIS)
 		static uint32_t     sg_dwCPDst = 0;             // 0 = code-page redirect off
+		static bool         sg_bFaceSpoof = false;      // GetTextFace/GetObject report requested name
+		static std::unordered_map<std::wstring, std::wstring> sg_mpSpoofFace; // replaced face -> requested face
+		static bool         sg_bEnumSpoof = false;      // fake EnumFontFamiliesExW hit for mapped-but-missing fonts
+		static std::unordered_set<std::wstring> sg_setSpoofEnumKeys;          // non-wildcard [FontMap] keys
+		static bool         sg_bDiagnostic = false;     // log requests, do NOT replace
+		static int          sg_iDiagTextLogs = 0;
+
+		static LogCallback sg_pfnLog = NULL;
+		typedef int (WINAPI* pMultiByteToWideChar)(UINT, DWORD, LPCCH, int, LPWSTR, int);
+		typedef int (WINAPI* pWideCharToMultiByte)(UINT, DWORD, LPCWCH, int, LPSTR, int, LPCCH, LPBOOL);
+		static pMultiByteToWideChar rawMultiByteToWideChar = MultiByteToWideChar;
+		static pWideCharToMultiByte rawWideCharToMultiByte = WideCharToMultiByte;
+
 		static std::wstring sg_wsGlobalFontW;      // resolved global replacement (first installed candidate)
 		static FontMapListT   sg_vFontMap;           // ordered per-font map (may contain wildcards)
 
@@ -248,6 +262,12 @@ namespace Rut
 			std::vector<std::wstring> vCand;
 			ParseCandidateList(wsFontNameList, vCand);
 			sg_wsGlobalFontW = ResolveFirstInstalled(vCand);
+
+			// Remember non-wildcard [FontMap] keys for EnumFontFamiliesExW spoofing.
+			sg_setSpoofEnumKeys.clear();
+			for (const auto& kv : vFontMap)
+				if (kv.first.find(L'*') == std::wstring::npos && kv.first.find(L'?') == std::wstring::npos)
+					sg_setSpoofEnumKeys.insert(kv.first);
 		}
 
 
@@ -274,6 +294,23 @@ namespace Rut
 			sg_dwCPDst = dwDstCodePage;
 		}
 
+		void ConfigureFaceSpoof(bool bEnable)
+		{
+			sg_bFaceSpoof = bEnable;
+			if (!bEnable) sg_mpSpoofFace.clear();
+		}
+
+		void ConfigureEnumFontSpoof(bool bEnable)
+		{
+			sg_bEnumSpoof = bEnable;
+		}
+
+		void ConfigureDiagnostic(bool bEnable)
+		{
+			sg_bDiagnostic = bEnable;
+			sg_iDiagTextLogs = 0;
+		}
+
 		void ConfigureFontAdjust(int iHeightScale, int iWidthScale, int iWeight, int iItalic, int iExtraScale)
 		{
 			sg_iFontHeightScale = (iHeightScale > 0 && iHeightScale <= 500) ? iHeightScale : 100;
@@ -290,9 +327,21 @@ namespace Rut
 		static pCreateFontA rawCreateFontA = CreateFontA;
 		HFONT WINAPI newCreateFontA(INT cHeight, INT cWidth, INT cEscapement, INT cOrientation, INT cWeight, DWORD bItalic, DWORD bUnderline, DWORD bStrikeOut, DWORD iCharSet, DWORD iOutPrecision, DWORD iClipPrecision, DWORD iQuality, DWORD iPitchAndFamily, LPCSTR pszFaceName)
 		{
+			if (sg_bDiagnostic)
+			{
+				if (sg_pfnLog) sg_pfnLog(L"[Diag] CreateFontA face=\"%hs\" charset=0x%02X h=%d w=%d q=%d", pszFaceName, iCharSet, cHeight, cWidth, iQuality);
+				return rawCreateFontA(cHeight, cWidth, cEscapement, cOrientation, cWeight, bItalic, bUnderline, bStrikeOut, iCharSet, iOutPrecision, iClipPrecision, iQuality, iPitchAndFamily, pszFaceName);
+			}
 			const char* sFace = ResolveFontNameA(pszFaceName);
 			if (sFace != pszFaceName)
 			{
+				if (sg_bFaceSpoof)
+				{
+					wchar_t wsReq[LF_FACESIZE] = { 0 }, wsRep[LF_FACESIZE] = { 0 };
+					rawMultiByteToWideChar(CP_ACP, 0, pszFaceName, -1, wsReq, LF_FACESIZE - 1);
+					rawMultiByteToWideChar(CP_ACP, 0, sFace, -1, wsRep, LF_FACESIZE - 1);
+					sg_mpSpoofFace[wsRep] = wsReq;
+				}
 				if (!sg_bCharsetSpoof)               // charset spoof: keep engine's charset
 					iCharSet = sg_dwCharSet;
 				pszFaceName = sFace;
@@ -323,9 +372,15 @@ namespace Rut
 		static pCreateFontW rawCreateFontW = CreateFontW;
 		HFONT WINAPI newCreateFontW(INT cHeight, INT cWidth, INT cEscapement, INT cOrientation, INT cWeight, DWORD bItalic, DWORD bUnderline, DWORD bStrikeOut, DWORD iCharSet, DWORD iOutPrecision, DWORD iClipPrecision, DWORD iQuality, DWORD iPitchAndFamily, LPCWSTR pszFaceName)
 		{
+			if (sg_bDiagnostic)
+			{
+				if (sg_pfnLog) sg_pfnLog(L"[Diag] CreateFontW face=\"%ls\" charset=0x%02X h=%d w=%d q=%d", pszFaceName, iCharSet, cHeight, cWidth, iQuality);
+				return rawCreateFontW(cHeight, cWidth, cEscapement, cOrientation, cWeight, bItalic, bUnderline, bStrikeOut, iCharSet, iOutPrecision, iClipPrecision, iQuality, iPitchAndFamily, pszFaceName);
+			}
 			const wchar_t* wsFace = ResolveFontNameW(pszFaceName);
 			if (wsFace != pszFaceName)
 			{
+				if (sg_bFaceSpoof) sg_mpSpoofFace[wsFace] = pszFaceName;
 				if (!sg_bCharsetSpoof)               // charset spoof: keep engine's charset
 					iCharSet = sg_dwCharSet;
 				pszFaceName = wsFace;
@@ -356,10 +411,22 @@ namespace Rut
 		static pCreateFontIndirectA rawCreateFontIndirectA = CreateFontIndirectA;
 		HFONT WINAPI newCreateFontIndirectA(LOGFONTA* lplf)
 		{
+			if (sg_bDiagnostic)
+			{
+				if (sg_pfnLog) sg_pfnLog(L"[Diag] CreateFontIndirectA face=\"%hs\" charset=0x%02X h=%ld w=%ld q=%d", lplf->lfFaceName, lplf->lfCharSet, lplf->lfHeight, lplf->lfWidth, lplf->lfQuality);
+				return rawCreateFontIndirectA(lplf);
+			}
 			LOGFONTA lf2 = *lplf;                     // work on a copy; never mutate engine's LOGFONT
 			const char* sFace = ResolveFontNameA(lf2.lfFaceName);
 			if (sFace != lf2.lfFaceName)
 			{
+				if (sg_bFaceSpoof)
+				{
+					wchar_t wsReq[LF_FACESIZE] = { 0 }, wsRep[LF_FACESIZE] = { 0 };
+					rawMultiByteToWideChar(CP_ACP, 0, lf2.lfFaceName, -1, wsReq, LF_FACESIZE - 1);
+					rawMultiByteToWideChar(CP_ACP, 0, sFace, -1, wsRep, LF_FACESIZE - 1);
+					sg_mpSpoofFace[wsRep] = wsReq;
+				}
 				if (!sg_bCharsetSpoof)               // charset spoof: keep engine's charset
 					lf2.lfCharSet = (BYTE)sg_dwCharSet;
 				strncpy_s(lf2.lfFaceName, LF_FACESIZE, sFace, _TRUNCATE);
@@ -390,10 +457,16 @@ namespace Rut
 		static pCreateFontIndirectW rawCreateFontIndirectW = CreateFontIndirectW;
 		HFONT WINAPI newCreateFontIndirectW(LOGFONTW* lplf)
 		{
+			if (sg_bDiagnostic)
+			{
+				if (sg_pfnLog) sg_pfnLog(L"[Diag] CreateFontIndirectW face=\"%ls\" charset=0x%02X h=%ld w=%ld q=%d", lplf->lfFaceName, lplf->lfCharSet, lplf->lfHeight, lplf->lfWidth, lplf->lfQuality);
+				return rawCreateFontIndirectW(lplf);
+			}
 			LOGFONTW lf2 = *lplf;                     // work on a copy; never mutate engine's LOGFONT
 			const wchar_t* wsFace = ResolveFontNameW(lf2.lfFaceName);
 			if (wsFace != lf2.lfFaceName)
 			{
+				if (sg_bFaceSpoof) sg_mpSpoofFace[wsFace] = lf2.lfFaceName;
 				if (!sg_bCharsetSpoof)               // charset spoof: keep engine's charset
 					lf2.lfCharSet = (BYTE)sg_dwCharSet;
 				wcsncpy_s(lf2.lfFaceName, LF_FACESIZE, wsFace, _TRUNCATE);
@@ -492,12 +565,10 @@ namespace Rut
 		typedef UINT (WINAPI* pGetACP)(void);
 		typedef UINT (WINAPI* pGetOEMCP)(void);
 		typedef BOOL (WINAPI* pGetCPInfo)(UINT, LPCPINFO);
-		typedef int  (WINAPI* pMultiByteToWideChar)(UINT, DWORD, LPCCH, int, LPWSTR, int);
 
 		static pGetACP              rawGetACP              = GetACP;
 		static pGetOEMCP            rawGetOEMCP            = GetOEMCP;
 		static pGetCPInfo           rawGetCPInfo           = GetCPInfo;
-		static pMultiByteToWideChar rawMultiByteToWideChar = MultiByteToWideChar;
 
 		UINT WINAPI newGetACP(void)
 		{
@@ -532,7 +603,123 @@ namespace Rut
 			bOk = DetourAttachFunc(&rawMultiByteToWideChar, newMultiByteToWideChar) && bOk;
 			return bOk;
 		}
+
 		//*********END Hook CodePage redirect*********
+
+
+		//*********Start Hook Face-name spoof*******
+		typedef int (WINAPI* pGetTextFaceW)(HDC, int, LPWSTR);
+		typedef int (WINAPI* pGetTextFaceA)(HDC, int, LPSTR);
+		typedef int (WINAPI* pGetObjectW)(HANDLE, int, LPVOID);
+
+		static pGetTextFaceW rawGetTextFaceW = GetTextFaceW;
+		static pGetTextFaceA rawGetTextFaceA = GetTextFaceA;
+		static pGetObjectW   rawGetObjectW   = GetObjectW;
+
+		int WINAPI newGetTextFaceW(HDC hdc, int cch, LPWSTR lpName)
+		{
+			int n = rawGetTextFaceW(hdc, cch, lpName);
+			if (n > 0 && lpName && sg_bFaceSpoof)
+			{
+				auto ite = sg_mpSpoofFace.find(lpName);
+				if (ite != sg_mpSpoofFace.end())
+				{
+					size_t nNeed = ite->second.size() + 1;
+					if (nNeed <= (size_t)cch) { wcscpy_s(lpName, (size_t)cch, ite->second.c_str()); return (int)ite->second.size(); }
+					if (cch > 0) { wcsncpy_s(lpName, (size_t)cch, ite->second.c_str(), _TRUNCATE); return cch - 1; }
+				}
+			}
+			return n;
+		}
+
+		int WINAPI newGetTextFaceA(HDC hdc, int cch, LPSTR lpName)
+		{
+			int n = rawGetTextFaceA(hdc, cch, lpName);
+			if (n > 0 && lpName && sg_bFaceSpoof)
+			{
+				wchar_t wsName[LF_FACESIZE] = { 0 };
+				rawMultiByteToWideChar(CP_ACP, 0, lpName, n, wsName, LF_FACESIZE - 1); // bypass CPRedirect on purpose
+				auto ite = sg_mpSpoofFace.find(wsName);
+				if (ite != sg_mpSpoofFace.end())
+				{
+					char sName[LF_FACESIZE] = { 0 };
+					rawWideCharToMultiByte(CP_ACP, 0, ite->second.c_str(), -1, sName, LF_FACESIZE - 1, NULL, NULL);
+					size_t nNeed = strlen(sName) + 1;
+					if (nNeed <= (size_t)cch) { strcpy_s(lpName, (size_t)cch, sName); return (int)strlen(sName); }
+					if (cch > 0) { strncpy_s(lpName, (size_t)cch, sName, _TRUNCATE); return cch - 1; }
+				}
+			}
+			return n;
+		}
+
+		int WINAPI newGetObjectW(HANDLE h, int nCount, LPVOID lpObject)
+		{
+			int n = rawGetObjectW(h, nCount, lpObject);
+			if (n > 0 && lpObject && sg_bFaceSpoof &&
+			    nCount >= (int)sizeof(LOGFONTW) && GetObjectType((HGDIOBJ)h) == OBJ_FONT)
+			{
+				LOGFONTW* plf = (LOGFONTW*)lpObject;
+				auto ite = sg_mpSpoofFace.find(plf->lfFaceName);
+				if (ite != sg_mpSpoofFace.end())
+					wcsncpy_s(plf->lfFaceName, LF_FACESIZE, ite->second.c_str(), _TRUNCATE);
+			}
+			return n;
+		}
+
+		bool HookFaceName()
+		{
+			bool bOk = DetourAttachFunc(&rawGetTextFaceW, newGetTextFaceW);
+			bOk = DetourAttachFunc(&rawGetTextFaceA, newGetTextFaceA) && bOk;
+			bOk = DetourAttachFunc(&rawGetObjectW, newGetObjectW) && bOk;
+			return bOk;
+		}
+		//*********END Hook Face-name spoof*********
+
+
+		//*********Start Hook EnumFontFamiliesExW*******
+		typedef int (WINAPI* pEnumFontFamiliesExW)(HDC, LPLOGFONTW, FONTENUMPROCW, LPARAM, DWORD);
+		static pEnumFontFamiliesExW rawEnumFontFamiliesExW = EnumFontFamiliesExW;
+
+		struct EnumSpoofCtx
+		{
+			FONTENUMPROCW pfn;
+			LPARAM        lp;
+			bool          bFound;
+			std::wstring  wsRequested;
+		};
+
+		int CALLBACK EnumSpoofProc(CONST LOGFONTW* lplf, CONST TEXTMETRICW* lptm, DWORD dwType, LPARAM lParam)
+		{
+			EnumSpoofCtx* pCtx = (EnumSpoofCtx*)lParam;
+			if (pCtx && lplf && pCtx->wsRequested == lplf->lfFaceName) pCtx->bFound = true;
+			return pCtx->pfn(lplf, lptm, dwType, pCtx->lp);
+		}
+
+		int WINAPI newEnumFontFamiliesExW(HDC hdc, LPLOGFONTW lpLogfont, FONTENUMPROCW lpEnumFontFamExProc, LPARAM lParam, DWORD dwFlags)
+		{
+			if (!sg_bEnumSpoof || !lpLogfont || !lpEnumFontFamExProc)
+				return rawEnumFontFamiliesExW(hdc, lpLogfont, lpEnumFontFamExProc, lParam, dwFlags);
+
+			EnumSpoofCtx ctx = { lpEnumFontFamExProc, lParam, false, lpLogfont->lfFaceName };
+			int nRet = rawEnumFontFamiliesExW(hdc, lpLogfont, EnumSpoofProc, (LPARAM)&ctx, dwFlags);
+			if (!ctx.bFound && sg_setSpoofEnumKeys.count(ctx.wsRequested))
+			{
+				LOGFONTW lfFake = *lpLogfont;        // keep the engine's requested face name
+				TEXTMETRICW tmFake = { 0 };
+				tmFake.tmHeight = 16; tmFake.tmAscent = 13; tmFake.tmDescent = 3;
+				nRet = lpEnumFontFamExProc(&lfFake, &tmFake, DEVICE_FONTTYPE, lParam);
+				if (sg_pfnLog) sg_pfnLog(L"[EnumSpoof] faked presence of \"%ls\"", ctx.wsRequested.c_str());
+			}
+			return nRet;
+		}
+
+		bool HookEnumFontFamiliesExW()
+		{
+			return DetourAttachFunc(&rawEnumFontFamiliesExW, newEnumFontFamiliesExW);
+		}
+		//*********END Hook EnumFontFamiliesExW*********
+
+
 
 
 		//=====================================================================
@@ -937,7 +1124,6 @@ namespace Rut
 		static std::unordered_map<char, char>       sg_mpCharMapA; // byte  -> byte (ExtTextOutA, values <= 0xFF)
 		static bool                                 sg_bCharMapEnabled = false;
 		static bool                                 sg_bAutoSC = false;   // traditional -> simplified (ExtTextOutW)
-		static LogCallback                          sg_pfnLog = NULL;
 
 		void SetLogCallback(LogCallback pfn)
 		{
@@ -1041,11 +1227,69 @@ namespace Rut
 		}
 
 
+				//*********Start Hook DrawText*******
+		typedef int (WINAPI* pDrawTextW)(HDC, LPCWSTR, int, LPRECT, UINT);
+		typedef int (WINAPI* pDrawTextA)(HDC, LPCSTR, int, LPRECT, UINT);
+		static pDrawTextW rawDrawTextW = DrawTextW;
+		static pDrawTextA rawDrawTextA = DrawTextA;
+
+		int WINAPI newDrawTextW(HDC hdc, LPCWSTR lpchText, int cchText, LPRECT lprc, UINT format)
+		{
+			if (lpchText && (sg_bCharMapEnabled || sg_bAutoSC))
+			{
+				int nLen = cchText;
+				if (nLen == -1) nLen = (int)wcslen(lpchText);
+				if (nLen > 0)
+				{
+					const wchar_t* wsMapped = MapCharsW(lpchText, (size_t)nLen);
+					if (wsMapped != lpchText)
+					{
+						if (sg_pfnLog) sg_pfnLog(L"[CharMap] DrawTextW: \"%ls\" -> \"%ls\"", lpchText, wsMapped);
+						return rawDrawTextW(hdc, wsMapped, -1, lprc, format); // mapped copy is null-terminated
+					}
+				}
+			}
+			return rawDrawTextW(hdc, lpchText, cchText, lprc, format);
+		}
+
+		int WINAPI newDrawTextA(HDC hdc, LPCSTR lpchText, int cchText, LPRECT lprc, UINT format)
+		{
+			if (lpchText && sg_bCharMapEnabled)
+			{
+				int nLen = cchText;
+				if (nLen == -1) nLen = (int)strlen(lpchText);
+				if (nLen > 0)
+				{
+					const char* sMapped = MapCharsA(lpchText, (size_t)nLen);
+					if (sMapped != lpchText)
+					{
+						if (sg_pfnLog) sg_pfnLog(L"[CharMap] DrawTextA: \"%hs\" -> \"%hs\"", lpchText, sMapped);
+						return rawDrawTextA(hdc, sMapped, -1, lprc, format);
+					}
+				}
+			}
+			return rawDrawTextA(hdc, lpchText, cchText, lprc, format);
+		}
+
+		bool HookDrawText()
+		{
+			bool bOk = DetourAttachFunc(&rawDrawTextW, newDrawTextW);
+			bOk = DetourAttachFunc(&rawDrawTextA, newDrawTextA) && bOk;
+			return bOk;
+		}
+		//*********END Hook DrawText*********
+
+
 		//*********Start Hook ExtTextOutW*******
 		static pExtTextOutW rawExtTextOutW = ExtTextOutW;
 
 		BOOL WINAPI newExtTextOutW(HDC hdc, INT x, INT y, UINT options, CONST RECT* lprect, LPCWSTR lpString, UINT c, CONST INT* lpDx)
 		{
+			if (sg_bDiagnostic && sg_pfnLog && sg_iDiagTextLogs < 200)
+			{
+				++sg_iDiagTextLogs;
+				sg_pfnLog(L"[Diag] ExtTextOutW[%d]: \"%.32ls\"", sg_iDiagTextLogs, lpString);
+			}
 			const wchar_t* wsMapped = MapCharsW(lpString, c);
 			if (wsMapped != lpString && sg_pfnLog)
 				sg_pfnLog(L"[CharMap] ExtTextOutW: \"%ls\" -> \"%ls\"", lpString, wsMapped);
@@ -1064,6 +1308,11 @@ namespace Rut
 
 		BOOL WINAPI newExtTextOutA(HDC hdc, INT x, INT y, UINT options, CONST RECT* lprect, LPCSTR lpString, UINT c, CONST INT* lpDx)
 		{
+			if (sg_bDiagnostic && sg_pfnLog && sg_iDiagTextLogs < 200)
+			{
+				++sg_iDiagTextLogs;
+				sg_pfnLog(L"[Diag] ExtTextOutA[%d]: \"%.32hs\"", sg_iDiagTextLogs, lpString);
+			}
 			const char* sMapped = MapCharsA(lpString, c);
 			if (sMapped != lpString && sg_pfnLog)
 				sg_pfnLog(L"[CharMap] ExtTextOutA: \"%hs\" -> \"%hs\"", lpString, sMapped);

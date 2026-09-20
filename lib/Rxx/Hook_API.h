@@ -63,6 +63,31 @@ namespace Rut
 		void ConfigureCodePageRedirect(uint32_t dwSrcCodePage, uint32_t dwDstCodePage);
 		bool HookCodePage();
 
+		// Face-name spoofing: when enabled, GetTextFaceA/W and GetObjectW (font
+		// LOGFONT queries) report the engine's originally requested face name
+		// instead of the replaced one. Some engines verify the font they just
+		// created and misbehave when the name differs (refuse to use it / recreate
+		// forever). Off by default.
+		void ConfigureFaceSpoof(bool bEnable);
+		bool HookFaceName();
+
+		// Font-enumeration spoofing: when the engine enumerates fonts to verify a
+		// face exists before using it, report a hit for [FontMap] keys that are not
+		// actually installed — engines that skip "missing" fonts still get the
+		// replacement instead of giving up. Off by default.
+		void ConfigureEnumFontSpoof(bool bEnable);
+		bool HookEnumFontFamiliesExW();
+
+		// DrawText support: route DrawTextA/W through the same [CharMap]/AutoSC
+		// mapping as ExtTextOut (engines that draw static/button text via DrawText).
+		bool HookDrawText();
+
+		// Diagnostics mode: when enabled, font creation is NOT replaced — every
+		// font-creation request (face/charset/size/quality) and a sample of text
+		// draws are logged instead, so you can see exactly what the engine asks
+		// for. Off by default.
+		void ConfigureDiagnostic(bool bEnable);
+
 		// Attach the SetTextCharacterExtra hook (inter-character spacing scaling).
 		// Only needed when ConfigureFontAdjust received iExtraScale != 100.
 		bool HookSetTextCharacterExtra();

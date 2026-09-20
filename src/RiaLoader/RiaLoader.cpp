@@ -79,11 +79,15 @@ static std::wstring GetShortPath(const std::wstring& wsPath)
 //   HookFont.exe                 : launch game from INI (default)
 //   HookFont.exe <game.exe> [..] : launch the given exe, extra args passed through
 //   HookFont.exe -pid <PID>      : inject DLLs into an already-running process
+//   HookFont.exe -diag           : launch the game in diagnostic mode (log every
+//                                  font request, do NOT replace) - for debugging
+//                                  "why didn't the font switch?" issues
 // ============================================================================
 struct CmdLine
 {
 	bool         bInjectPid = false;
 	DWORD        dwPid = 0;
+	bool         bDiag = false;        // -diag: set HOOKFONT_DIAG=1 for the DLL
 	std::wstring wsExeOverride;   // command-line-specified game exe (may be relative)
 	std::wstring wsGameArgs;      // extra args passed through to the game
 };
@@ -106,6 +110,10 @@ static CmdLine ParseCommandLine()
 				cl.bInjectPid = true;
 				cl.dwPid = wcstoul(argv[++i], nullptr, 10);
 			}
+		}
+		else if (arg == L"-diag" || arg == L"--diag" || arg == L"/diag")
+		{
+			cl.bDiag = true;
 		}
 		else if (cl.wsExeOverride.empty())
 		{
@@ -319,6 +327,14 @@ INT APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
 		LogPrint(L"Working dir: %ls", wsTargetDir.c_str());
 		LogPrint(L"CmdLine: %ls", pCmdLine ? pCmdLine : L"(none)");
 		for (auto& sDll : vecDllAnsi) { LogPrint(L"  Inject: %hs", sDll.c_str()); }
+
+		// -diag: tell the injected DLL to run in diagnostic mode (log every font
+		// request, do NOT replace) via an env var inherited by the child process.
+		if (cl.bDiag)
+		{
+			SetEnvironmentVariableW(L"HOOKFONT_DIAG", L"1");
+			LogPrint(L"Diagnostic mode ON (HOOKFONT_DIAG=1)");
+		}
 
 		STARTUPINFOW si = { 0 };
 		PROCESS_INFORMATION pi = { 0 };
